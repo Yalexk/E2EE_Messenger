@@ -3,13 +3,38 @@ import dotenv from "dotenv";
 
 import {connectDB} from "./lib/db.js";
 import authRoutes from "./routes/auth.route.js";
+import swaggerJsDoc from "swagger-jsdoc";
+import swaggerUi from "swagger-ui-express";
+import cookieParser from "cookie-parser";
+
+const app = express();
+
+const options = {
+    definition: {
+        openapi: "3.0.0",
+        info: {
+            title: "COMP6841 Messager API",
+            version: "1.0.0",
+            description: "API for Messager, a e2ee chatting app for Alex's COMP6841 project",
+        },
+        servers: [
+            {
+                url: "http://localhost:5001/api/auth",
+            },
+        ],
+    },
+    apis: ["./src/routes/auth.route.js"],
+};
+
+const swaggerSpec = swaggerJsDoc(options);
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 dotenv.config();
-const app = express();
 
 const PORT = process.env.PORT;
 
 app.use(express.json());
+app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
 

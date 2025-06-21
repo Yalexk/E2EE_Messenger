@@ -1,11 +1,13 @@
 import express from "express"
 import dotenv from "dotenv";
-
-import {connectDB} from "./lib/db.js";
-import authRoutes from "./routes/auth.route.js";
 import swaggerJsDoc from "swagger-jsdoc";
 import swaggerUi from "swagger-ui-express";
 import cookieParser from "cookie-parser";
+
+import {connectDB} from "./lib/db.js";
+
+import authRoutes from "./routes/auth.route.js";
+import messageRoutes from "./routes/message.route.js";
 
 const app = express();
 
@@ -19,11 +21,14 @@ const options = {
         },
         servers: [
             {
-                url: "http://localhost:5001/api/auth",
+                url: "http://localhost:5001/api",
             },
         ],
     },
-    apis: ["./src/routes/auth.route.js"],
+    apis: [
+        "./src/routes/auth.route.js", 
+        "./src/routes/message.route.js"
+    ],
 };
 
 const swaggerSpec = swaggerJsDoc(options);
@@ -37,6 +42,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use("/api/auth", authRoutes);
+app.use("/api/message", messageRoutes);
 
 app.listen(PORT, () => {
   console.log('Server is running on PORT: ' + PORT);

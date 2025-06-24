@@ -24,8 +24,6 @@ const router = express.Router();
  *                     type: string
  *                   username:
  *                     type: string
- *                   email:
- *                     type: string
  *                   createdAt:
  *                     type: string
  *                     format: date-time

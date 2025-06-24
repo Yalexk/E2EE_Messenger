@@ -6,7 +6,7 @@ const router = express.Router();
 
 /**
  * @swagger
- * /signup:
+ * /auth/signup:
  *   post:
  *     summary: Signup for the chatting app
  *     description: Adds the user to the database
@@ -20,9 +20,6 @@ const router = express.Router();
  *               username:
  *                 type: string
  *                 example: johndoe
- *               email:
- *                 type: string
- *                 example: johndoe@example.com
  *               password:
  *                 type: string
  *                 example: mysecretpassword
@@ -38,7 +35,7 @@ router.post("/signup", signup);
 
 /**
  * @swagger
- * /login:
+ * /auth/login:
  *   post:
  *     summary: Login to the chatting app
  *     description: Authenticates a user and returns a token
@@ -49,9 +46,9 @@ router.post("/signup", signup);
  *           schema:
  *             type: object
  *             properties:
- *               email:
+ *               username:
  *                 type: string
- *                 example: johndoe@example.com
+ *                 example: johndoe
  *               password:
  *                 type: string
  *                 example: mysecretpassword
@@ -67,7 +64,7 @@ router.post("/login", login);
 
 /**
  * @swagger
- * /logout:
+ * /auth/logout:
  *   post:
  *     summary: Logout from the chatting app
  *     description: Logs out the user
@@ -85,7 +82,7 @@ router.post("/logout", logout);
 
 /**
  * @swagger
- * /check:
+ * /auth/check:
  *   get:
  *     summary: Check user authentication status
  *     description: Checks if the user is authenticated (e.g., after a page refresh). Requires a valid JWT cookie.
@@ -103,9 +100,6 @@ router.post("/logout", logout);
  *                 username:
  *                   type: string
  *                   example: johndoe
- *                 email:
- *                   type: string
- *                   example: johndoe@example.com
  *                 createdAt:
  *                   type: string
  *                   format: date-time

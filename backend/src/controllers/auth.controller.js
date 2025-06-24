@@ -3,9 +3,9 @@ import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 
 export const signup = async (req, res) => {
-    const { username, email, password } = req.body;
+    const { username, password } = req.body;
     try {
-        if (!username || !email || !password) {
+        if (!username || !password) {
             return res.status(400).json({ message: "All fields are required" });
         }
         
@@ -13,22 +13,18 @@ export const signup = async (req, res) => {
             return res.status(400).json({ message: "Password must be at least 6 characters" });
         }
 
-        const user1 = await User.findOne({email})
-        if (user1) return res.status(400).json({ message: "Email already in use" });
-
-        const user2 = await User.findOne({username})
-        if (user2) return res.status(400).json({ message: "Username already in use" });
+        const user = await User.findOne({ username });
+        if (user) return res.status(400).json({ message: "Username already in use" });
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
 
         const newUser = new User({
             username,
-            email,
             password: hashedPassword
         });
 
-        if(newUser) {
+        if (newUser) {
             // generate jwt token
             generateToken(newUser._id, res);
             await newUser.save();
@@ -37,7 +33,6 @@ export const signup = async (req, res) => {
                 user: {
                     _id: newUser._id,
                     username: newUser.username,
-                    email: newUser.email,
                 },
             });
         } else {
@@ -48,21 +43,20 @@ export const signup = async (req, res) => {
         console.error("Error during signup:", error);
         return res.status(500).json({ message: "Internal server error" });
     }
-
 };
 
 export const login = async (req, res) => {
-    const { email, password } = req.body;
+    const { username, password } = req.body;
     try {
-        const user = await User.findOne({email});
+        const user = await User.findOne({ username });
         if (!user) {
-            return res.status(400).json({ message: "Invalid email or password" });
+            return res.status(400).json({ message: "Invalid username or password" });
         }
 
-        const isPasswordCorrect = await bcrypt.compare(password, user.password)
+        const isPasswordCorrect = await bcrypt.compare(password, user.password);
         
         if (!isPasswordCorrect) {
-            return res.status(400).json({ message: "Invalid email or password" });
+            return res.status(400).json({ message: "Invalid username or password" });
         }
 
         // generate jwt token
@@ -71,9 +65,8 @@ export const login = async (req, res) => {
         res.status(200).json({
             message: "Login successful",
             user: {
-            _id: user._id,
-            username: user.username,
-            email: user.email,
+                _id: user._id,
+                username: user.username,
             },
         });
     } catch (error) {
@@ -84,7 +77,7 @@ export const login = async (req, res) => {
 
 export const logout = (req, res) => {
     try {
-        res.cookie("jwt", "", {maxAge:0});
+        res.cookie("jwt", "", { maxAge: 0 });
         res.status(200).json({ message: "Logout successful" });
     } catch (error) {
         console.error("Error during logout:", error);

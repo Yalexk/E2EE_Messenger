@@ -27,7 +27,6 @@ export const useAuthStore = create((set) => ({
             set({ authUser: res.data }) // res.data.user?
             window.alert("Signed up successfully.");
         } catch (error) {
-            window.alert(`Error signing up: ${error.response.data.message}`);
             console.error("Error signing up:", error);
         } finally {
             set({ isSigningUp: false });
@@ -41,7 +40,6 @@ export const useAuthStore = create((set) => ({
             set({ authUser: res.data });
             window.alert("Logged in successfully.");
         } catch (error) {
-            window.alert(`Error logging in: ${error.response.data.message}`);
             console.error("Error logging in:", error);
         } finally {
             set({ isLoggingIn: false });
@@ -54,7 +52,6 @@ export const useAuthStore = create((set) => ({
             set({ authUser: null });
             window.alert("Logged out successfully.");
         } catch (error) {
-            window.alert(`Error logging out: ${error.response.data.message}`);
             console.error("Error logging out:", error);
         }
     },

@@ -5,12 +5,11 @@ import swaggerUi from "swagger-ui-express";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 
-import {connectDB} from "./lib/db.js";
+import { connectDB } from "./lib/db.js";
 
 import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
-
-const app = express();
+import { app, server } from "./lib/socket.js";
 
 const options = {
     definition: {
@@ -49,7 +48,7 @@ app.use(cors({
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
 
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log('Server is running on PORT: ' + PORT);
   connectDB();
 });

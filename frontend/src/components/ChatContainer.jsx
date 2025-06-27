@@ -5,13 +5,15 @@ import ChatHeader from './ChatHeader'
 import MessageInput from './MessageInput'
 
 const ChatContainer = () => {
-  const { messages, getMessages, isMessagesLoading, selectedUser } = useChatStore()
+  const { messages, getMessages, isMessagesLoading, selectedUser, listenToMessages, deafenMessages } = useChatStore()
   const { authUser } = useAuthStore()
   const messageEndRef = useRef(null)
 
   useEffect(() => {
-    getMessages(selectedUser._id)
-  }, [selectedUser._id, getMessages])
+    getMessages(selectedUser._id);
+    listenToMessages();
+    return () => deafenMessages();
+  }, [selectedUser._id, getMessages, listenToMessages, deafenMessages]);
 
   useEffect(() => {
     messageEndRef.current?.scrollIntoView({ behavior: "smooth" })

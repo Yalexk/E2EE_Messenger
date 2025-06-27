@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { axiosInstance } from '../lib/axios.js';    
+import { useAuthStore } from './useAuthStore.js';
 
 export const useChatStore = create((set, get) => ({
     messages: [],
@@ -42,8 +43,30 @@ export const useChatStore = create((set, get) => ({
         }
     },
 
+    listenToMessages: () => {
+        const {selectedUser} =  get();
+        if (!selectedUser) return;
+
+        const socket = useAuthStore.getState().socket;
+
+        socket.on("newMessage", (newMessage) => {
+            const sentByYou = newMessage.senderId === selectedUser._id;
+            if (!sentByYou) return;
+           
+            set((state) => ({
+                messages: [...state.messages, newMessage]
+            }));
+        });
+    },
+
+    deafenMessages: () => {
+        const socket = useAuthStore.getState().socket;
+        socket.off("newMessage");
+    },
+
     setSelectedUser: (user) => {
         set({ selectedUser: user });
     },
+
 
 }));

@@ -131,6 +131,6 @@ router.get("/:id", protectRoute, getMessages);
  *       500:
  *         description: Internal server error
  */
-router.post("/send:id", protectRoute, sendMessage);
+router.post("/send/:id", protectRoute, sendMessage);
 
 export default router;

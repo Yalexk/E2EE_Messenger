@@ -1,6 +1,12 @@
 import { generateToken } from "../lib/utils.js";
 import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
+
+const dh = crypto.createDiffieHellman(2048);
+console.log("Prime (base64):", dh.getPrime('base64'));
+console.log("Generator (base64):", dh.getGenerator('base64'));
+const publicKey = dh.generateKeys('base64');
 
 export const signup = async (req, res) => {
     const { username, password } = req.body;
@@ -21,7 +27,8 @@ export const signup = async (req, res) => {
 
         const newUser = new User({
             username,
-            password: hashedPassword
+            password: hashedPassword,
+            publicKey,
         });
 
         if (newUser) {
@@ -33,6 +40,8 @@ export const signup = async (req, res) => {
                 user: {
                     _id: newUser._id,
                     username: newUser.username,
+                    publicKey: newUser.publicKey,
+
                 },
             });
         } else {

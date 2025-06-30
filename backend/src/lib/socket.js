@@ -19,15 +19,15 @@ export function getReceiverSocketId(userId) {
 
 io.on("connection", (socket) => {
     console.log("A user connected", socket.id)
-    const userId = socket.handshake.query.userId;
+    const userId = socket.handshake.auth.userId;
     if (userId) {
         userSocketMap.set(userId, socket.id);
         console.log(`User ${userId} connected with socket ID: ${socket.id}`);
     }
 
     socket.on("disconnect", () => {
-		console.log("A user disconnected", socket.id)
-		delete userSocketMap[userId];
+      console.log("A user disconnected", socket.id)
+      delete userSocketMap[userId];
     })
 })
 export {io, app, server};

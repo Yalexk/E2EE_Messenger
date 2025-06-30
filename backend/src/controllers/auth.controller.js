@@ -3,8 +3,6 @@ import User from "../models/user.model.js";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
-const dh = crypto.createDiffieHellman(2048);
-
 export const signup = async (req, res) => {
     const {
         username,

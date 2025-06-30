@@ -42,10 +42,12 @@ export const useAuthStore = create((set, get) => ({
                 edIdentityKeyPair.secretKey
             );
 
-            const oneTimePreKeys = [];
+            const oneTimePreKeysPublic = [];
+            const oneTimePreKeysPrivate = [];
             for (let i = 0; i < 10; i++) {
                 const keyPair = nacl.box.keyPair();
-                oneTimePreKeys.push(naclUtil.encodeBase64(keyPair.publicKey));
+                oneTimePreKeysPublic.push(naclUtil.encodeBase64(keyPair.publicKey));
+                oneTimePreKeysPrivate.push(naclUtil.encodeBase64(keyPair.secretKey));
             }
 
             const identityKey = naclUtil.encodeBase64(identityKeyPair.publicKey);
@@ -57,6 +59,7 @@ export const useAuthStore = create((set, get) => ({
                 identityKeySecret: naclUtil.encodeBase64(identityKeyPair.secretKey),
                 edIdentityKeySecret: naclUtil.encodeBase64(edIdentityKeyPair.secretKey),
                 signedPreKeySecret: naclUtil.encodeBase64(signedPreKeyPair.secretKey),
+                oneTimePreKeysSecret: oneTimePreKeysPrivate,
             };
             
             // TODO Encrypt the private key with the password and store it in local storage
@@ -69,7 +72,7 @@ export const useAuthStore = create((set, get) => ({
                 edIdentityKey,
                 signedPreKey,
                 signedPreKeySignature: signedPreKeySignatureBase64,
-                oneTimePreKeys,
+                oneTimePreKeys: oneTimePreKeysPublic,
             });
 
             set({ authUser: res.data })

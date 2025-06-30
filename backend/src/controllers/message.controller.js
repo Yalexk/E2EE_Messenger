@@ -56,6 +56,7 @@ export const getKeys = async (receiverId) => {
             await receiver.save();
         }
 
+
         const keys = {
             identityKey: receiver.identityKey,
             edIdentityKey: receiver.edIdentityKey,
@@ -100,6 +101,9 @@ export const sendMessage = async (req, res) => {
             return res.status(404).json({ message: "Receiver not found or no keys available" });
         }
         console.log("Keys fetched:", receiverKeys);
+
+       //  TODO: verify the receiver using their signed prekey signature
+
 
         const newMessage = new Message({
             senderId,

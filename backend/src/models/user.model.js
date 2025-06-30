@@ -16,6 +16,26 @@ const userSchema = new mongoose.Schema(
         type: Date,
         default: Date.now,
         },
+        identityKey: {
+        type: String,
+        required: true,
+        },
+        edIdentityKey: {
+        type: String,
+        required: true,
+        },
+        signedPreKey: {
+        type: String,
+        required: true,
+        },
+        signedPreKeySignature: {
+        type: String,
+        required: true,
+        },
+        oneTimePreKeys: [{
+        type: String,
+        required: true,
+        }],
     },
     {
         timestamps: true,

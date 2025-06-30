@@ -12,10 +12,6 @@ const messageSchema = new mongoose.Schema(
         ref: "User",
         required: true,
         },
-        publicKey: {
-        type: String,
-        required: true,
-        },
         text: {
         type: String,
         },

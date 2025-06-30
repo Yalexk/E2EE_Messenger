@@ -1,6 +1,9 @@
 import {create} from 'zustand';
 import { axiosInstance } from '../lib/axios.js';
 import { io } from 'socket.io-client';
+import nacl from 'tweetnacl';
+import naclUtil from 'tweetnacl-util';
+import ed2curve from 'ed2curve';
 
 const BASE_URL = 'http://localhost:5001';
 export const useAuthStore = create((set, get) => ({
@@ -27,7 +30,48 @@ export const useAuthStore = create((set, get) => ({
     signup: async (data) => {
         set({ isSigningUp: true })
         try {
-            const res = await axiosInstance.post("/auth/signup", data);
+            // Generate identity key pairs
+            // Ed25519 keypair for signing, need to convert it to X25519 for encryption using ed2curve
+            const edIdentityKeyPair = nacl.sign.keyPair(); 
+            const identityKeyPair = ed2curve.convertKeyPair(edIdentityKeyPair);
+            const signedPreKeyPair = nacl.box.keyPair(); // X25519 keypair
+
+            // Create the signed prekey signature
+            const signedPreKeySignature = nacl.sign.detached(
+                signedPreKeyPair.publicKey,
+                edIdentityKeyPair.secretKey
+            );
+
+            const oneTimePreKeys = [];
+            for (let i = 0; i < 10; i++) {
+                const keyPair = nacl.box.keyPair();
+                oneTimePreKeys.push(naclUtil.encodeBase64(keyPair.publicKey));
+            }
+
+            const identityKey = naclUtil.encodeBase64(identityKeyPair.publicKey);
+            const edIdentityKey = naclUtil.encodeBase64(edIdentityKeyPair.publicKey);
+            const signedPreKey = naclUtil.encodeBase64(signedPreKeyPair.publicKey);
+            const signedPreKeySignatureBase64 = naclUtil.encodeBase64(signedPreKeySignature);
+            
+            const privateKeys = {
+                identityKeySecret: naclUtil.encodeBase64(identityKeyPair.secretKey),
+                edIdentityKeySecret: naclUtil.encodeBase64(edIdentityKeyPair.secretKey),
+                signedPreKeySecret: naclUtil.encodeBase64(signedPreKeyPair.secretKey),
+            };
+            
+            // TODO Encrypt the private key with the password and store it in local storage
+            const privateKeysString = JSON.stringify(privateKeys);
+            localStorage.setItem('identityPrivateKeys', privateKeysString); 
+
+            const res = await axiosInstance.post("/auth/signup", {
+                ...data,
+                identityKey,
+                edIdentityKey,
+                signedPreKey,
+                signedPreKeySignature: signedPreKeySignatureBase64,
+                oneTimePreKeys,
+            });
+
             set({ authUser: res.data })
             get().connectSocket();
             window.alert("Signed up successfully.");

@@ -4,12 +4,18 @@ import bcrypt from "bcryptjs";
 import crypto from "crypto";
 
 const dh = crypto.createDiffieHellman(2048);
-console.log("Prime (base64):", dh.getPrime('base64'));
-console.log("Generator (base64):", dh.getGenerator('base64'));
-const publicKey = dh.generateKeys('base64');
 
 export const signup = async (req, res) => {
-    const { username, password } = req.body;
+    const {
+        username,
+        password,
+        identityKey,
+        edIdentityKey,
+        signedPreKey,
+        signedPreKeySignature,
+        oneTimePreKeys
+    } = req.body;
+
     try {
         if (!username || !password) {
             return res.status(400).json({ message: "All fields are required" });
@@ -28,7 +34,11 @@ export const signup = async (req, res) => {
         const newUser = new User({
             username,
             password: hashedPassword,
-            publicKey,
+            identityKey,
+            edIdentityKey,
+            signedPreKey,
+            signedPreKeySignature,
+            oneTimePreKeys,
         });
 
         if (newUser) {
@@ -36,14 +46,17 @@ export const signup = async (req, res) => {
             generateToken(newUser._id, res);
             await newUser.save();
             return res.status(201).json({
-                message: "User created successfully",
-                user: {
-                    _id: newUser._id,
-                    username: newUser.username,
-                    publicKey: newUser.publicKey,
-
-                },
-            });
+            message: "User created successfully",
+            user: {
+                _id: newUser._id,
+                username: newUser.username,
+                identityKey: newUser.identityKey,
+                edIdentityKey: newUser.edIdentityKey,
+                signedPreKey: newUser.signedPreKey,
+                signedPreKeySignature: newUser.signedPreKeySignature,
+                oneTimePreKeys: newUser.oneTimePreKeys,
+            },
+        });
         } else {
             return res.status(400).json({ message: "Invalid user data" });
         }

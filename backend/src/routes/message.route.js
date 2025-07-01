@@ -1,6 +1,6 @@
 import express from 'express';
 import { protectRoute } from '../middleware/auth.middleware.js';
-import { getUsersForSideBar, getMessages, sendMessage } from '../controllers/message.controller.js';
+import { getUsersForSideBar, getMessages, sendMessage, getKeysRoute } from '../controllers/message.controller.js';
 
 const router = express.Router();
 
@@ -132,5 +132,7 @@ router.get("/:id", protectRoute, getMessages);
  *         description: Internal server error
  */
 router.post("/send/:id", protectRoute, sendMessage);
+
+router.get('/keys/:id', protectRoute, getKeysRoute);
 
 export default router;

@@ -77,6 +77,23 @@ export const getKeys = async (receiverId) => {
     }
 }
 
+export const getKeysRoute = async (req, res) => {
+    try {
+        const { id: receiverId } = req.params;
+        const keys = await getKeys(receiverId);
+        if (!keys) {
+            return res.status(404).json({ message: "Receiver not found or no keys available" });
+        }
+
+        console.log("Keys fetched:", keys);
+        
+        res.status(200).json(keys);
+    } catch (error) {
+        console.error("Error in getKeysRoute:", error.message);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
 // TODO gonna need to change this later to include e2ee - for now just a simple text message
 export const sendMessage = async (req, res) => {
     // call getKeys when sendMessage is called
@@ -93,14 +110,6 @@ export const sendMessage = async (req, res) => {
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
         
-        console.log("getKeys called with receiverId:", receiverId);
-
-        const receiverKeys = await getKeys(receiverId);
-
-        if (!receiverKeys) {
-            return res.status(404).json({ message: "Receiver not found or no keys available" });
-        }
-        console.log("Keys fetched:", receiverKeys);
 
        //  TODO: verify the receiver using their signed prekey signature
 

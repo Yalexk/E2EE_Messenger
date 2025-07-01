@@ -95,24 +95,11 @@ export const getKeysRoute = async (req, res) => {
 };
 
 // TODO gonna need to change this later to include e2ee - for now just a simple text message
-export const sendMessage = async (req, res) => {
-    // call getKeys when sendMessage is called
-    // this will return the public keys of the receiver
-    // then alice will verify the public keys of the receiver
-    // then alice will encrypt the message using the public keys of the receiver
-    // then alice will send the encrypted message to the receiver
-    // the receiver will decrypt the message using their private keys
-    // and then the receiver will send the decrypted message to the frontend
-    // the frontend will display the decrypted message in the chat
-    
+export const sendMessage = async (req, res) => {    
     try {
         const { text } = req.body;
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
-        
-
-       //  TODO: verify the receiver using their signed prekey signature
-
 
         const newMessage = new Message({
             senderId,
@@ -133,3 +120,8 @@ export const sendMessage = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+
+// function to send the inital message containing the shared secret, otkid, 
+// identity key and ephemeral key
+// when a user clicks on a user in the sidebar
+export const sendInitialMessage = async (req, res) => {}

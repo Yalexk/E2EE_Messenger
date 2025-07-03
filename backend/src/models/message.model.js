@@ -25,13 +25,12 @@ const messageSchema = new mongoose.Schema(
         },
         otkKeyId: {
             type: String,
-            required: function () { return this.isInitialMessage; },
         },
-        sharedSecret: {
+        edIdentityKey: {
             type: String,
             required: function () { return this.isInitialMessage; },
         },
-        edIdentityKey: {
+        nonce: {
             type: String,
             required: function () { return this.isInitialMessage; },
         },

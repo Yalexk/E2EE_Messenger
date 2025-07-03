@@ -11,6 +11,7 @@ const Sidebar = () => {
     fetchRecipientKeys,
     loadKeysFromStorage,
     createSharedSecret,
+    sendInitialMessage,
   } = useChatStore();
 
   useEffect(() => {
@@ -26,10 +27,9 @@ const Sidebar = () => {
 
     const myIdentityKey = useChatStore.getState().identityKey;
 
-    const sharedSecret = await createSharedSecret(recipientKeyBundle, myIdentityKey);
-    
+    await createSharedSecret(recipientKeyBundle, myIdentityKey);
 
-
+    await sendInitialMessage();
     
   }
 

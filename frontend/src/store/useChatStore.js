@@ -11,6 +11,9 @@ export const useChatStore = create((set, get) => ({
     selectedUser: null,
     isUsersLoading: false,
     isMessagesLoading: false,
+    
+    // Recipient key bundle containing public keys of the recipient
+    // This will be fetched from the server when a user is selected
     recipientKeyBundle: null,
 
     // Private keys
@@ -19,11 +22,12 @@ export const useChatStore = create((set, get) => ({
     signedPreKey: null,
     oneTimePreKeys: [],
     
+    sharedSecret: null,
+
     // to be set after creating shared secret
     ephemeralKeyPublic: null,
-    sharedSecret: null,
     otkKeyId: null,
-    // also need to send the public key of the 
+    // also need to send the public identity key of the sender to verify
 
 
     getUsers: async () => {
@@ -86,6 +90,7 @@ export const useChatStore = create((set, get) => ({
     },
 
     fetchRecipientKeys: async (userId) => {
+        // maybe need to also verify with the info in the storage
         try {
             const res = await axiosInstance.get(`/messages/keys/${userId}`);
             const keys = res.data;
@@ -177,6 +182,35 @@ export const useChatStore = create((set, get) => ({
         return sharedSecretBase64;
     },
 
-    sendInitialMessage: async (messageData) => {},
+    sendInitialMessage: async () => {
+        try {
+            const { selectedUser, sharedSecret, ephemeralKeyPublic, otkKeyId, edIdentityKey } = get();
+            const initialMessage = "Hello, this is a secure message!";
+            const messageUint8 = naclUtil.decodeUTF8(initialMessage);
+            const keyUint8 = naclUtil.decodeBase64(sharedSecret);
+            const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
+            const encrypted = nacl.secretbox(messageUint8, nonce, keyUint8);
+
+            // Encode encrypted data and nonce for sending
+            const encryptedMessage = naclUtil.encodeBase64(encrypted);
+            const encodedNonce = naclUtil.encodeBase64(nonce);
+
+            const payload = {
+                encryptedMessage,    // encrypted message using shared secret
+                nonce: encodedNonce, // nonce in base64
+                ephemeralKeyPublic,  // base64 string
+                edIdentityKey,       // Ed25519 public key (base64)
+                otkKeyId             // key id for one-time prekey, if used else null
+            };
+
+            const res = await axiosInstance.post(`/messages/sendInitial/${selectedUser._id}`, payload);
+
+            console.log("Initial message sent:", res.data);
+        } catch (error) {
+            console.error("Error sending initial message:", error);
+        }
+
+        
+    },
 
 }));

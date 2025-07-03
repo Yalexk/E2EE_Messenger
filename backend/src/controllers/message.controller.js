@@ -125,14 +125,40 @@ export const sendMessage = async (req, res) => {
 // identity key and ephemeral key
 // when a user clicks on a user in the sidebar
 export const sendInitialMessage = async (req, res) => {
-    const { id: receiverId } = req.params;
-    const senderId = req.user._id;
-    const edIdentityKey = req.user.edIdentityKey;
-    const {
+    try {
+        const { id: receiverId } = req.params;
+        const senderId = req.user._id;
+        const edIdentityKey = req.user.edIdentityKey;
+        const {
+            encryptedMessage, 
+            nonce,
             ephemeralKeyPublic,
             otkKeyId,
-            sharedSecret,
         } = req.body;
     
-        const initialMessage = 
+        const initialMessage = new Message({
+            text: encryptedMessage,
+            senderId,
+            receiverId,
+            isInitialMessage: true,
+            ephemeralKeyPublic,
+            otkKeyId,
+            nonce,
+            edIdentityKey,
+        });
+
+        await initialMessage.save();
+
+        const receiverSocketId = getReceiverSocketId(receiverId);
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("initialMessage", initialMessage);
+        }
+
+        console.log("Initial message sent:", initialMessage);
+
+        res.status(201).json(initialMessage);
+    } catch (error) {
+        console.error("Error sending initial message:", error.message);
+        res.status(500).json({ message: "Internal server error" });
+    };
 }

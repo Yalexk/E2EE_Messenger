@@ -2,11 +2,36 @@ import React, { useEffect } from 'react';
 import { useChatStore } from '../store/useChatStore.js';
 
 const Sidebar = () => {
-  const { getUsers, users, selectedUser, setSelectedUser, isUsersLoading } = useChatStore();
+  const {
+    getUsers,
+    users,
+    selectedUser,
+    setSelectedUser,
+    isUsersLoading,
+    fetchRecipientKeys,
+    loadKeysFromStorage,
+    createSharedSecret,
+  } = useChatStore();
 
   useEffect(() => {
     getUsers();
   }, [getUsers]);
+
+  const handleUserClick = async (user) => {
+    setSelectedUser(user);
+  
+    loadKeysFromStorage();
+
+    const recipientKeyBundle = await fetchRecipientKeys(user._id);
+
+    const myIdentityKey = useChatStore.getState().identityKey;
+
+    const sharedSecret = await createSharedSecret(recipientKeyBundle, myIdentityKey);
+    
+
+
+    
+  }
 
   if (isUsersLoading) {
     return <div className="loading">Loading...</div>;
@@ -18,7 +43,7 @@ const Sidebar = () => {
         {users.map((user) => (
           <button
             key={user._id}
-            onClick={() => setSelectedUser(user)}
+            onClick={() => handleUserClick(user)}
             className={`
               w-full p-3 flex items-center gap-3
               hover:bg-base-300 transition-colors

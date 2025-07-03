@@ -124,4 +124,6 @@ export const sendMessage = async (req, res) => {
 // function to send the inital message containing the shared secret, otkid, 
 // identity key and ephemeral key
 // when a user clicks on a user in the sidebar
-export const sendInitialMessage = async (req, res) => {}
+export const sendInitialMessage = async (req, res) => {
+    
+}

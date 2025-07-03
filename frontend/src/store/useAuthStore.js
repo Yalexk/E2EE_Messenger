@@ -64,7 +64,7 @@ export const useAuthStore = create((set, get) => ({
             
             // TODO Encrypt the private key with the password and store it in local storage
             const privateKeysString = JSON.stringify(privateKeys);
-            localStorage.setItem('identityPrivateKeys', privateKeysString); 
+            localStorage.setItem('privateKeys', privateKeysString); 
 
             const res = await axiosInstance.post("/auth/signup", {
                 ...data,

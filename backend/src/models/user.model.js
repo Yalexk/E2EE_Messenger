@@ -36,6 +36,8 @@ const userSchema = new mongoose.Schema(
         type: String,
         required: true,
         }],
+        // TODO: add a known users in the db containing public identity keys
+        // of people that the user has chatted with 
     },
     {
         timestamps: true,

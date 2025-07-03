@@ -125,5 +125,14 @@ export const sendMessage = async (req, res) => {
 // identity key and ephemeral key
 // when a user clicks on a user in the sidebar
 export const sendInitialMessage = async (req, res) => {
+    const { id: receiverId } = req.params;
+    const senderId = req.user._id;
+    const edIdentityKey = req.user.edIdentityKey;
+    const {
+            ephemeralKeyPublic,
+            otkKeyId,
+            sharedSecret,
+        } = req.body;
     
+        const initialMessage = 
 }

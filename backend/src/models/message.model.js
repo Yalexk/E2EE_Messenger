@@ -3,17 +3,37 @@ import mongoose from "mongoose";
 const messageSchema = new mongoose.Schema(
     {
         senderId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
         },
         receiverId: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+            required: true,
         },
         text: {
-        type: String,
+            type: String,
+        },
+        isInitialMessage: {
+            type: Boolean,
+            default: false,
+        },
+        ephemeralKeyPublic: {
+            type: String,
+            required: function () { return this.isInitialMessage; },
+        },
+        otkKeyId: {
+            type: String,
+            required: function () { return this.isInitialMessage; },
+        },
+        sharedSecret: {
+            type: String,
+            required: function () { return this.isInitialMessage; },
+        },
+        edIdentityKey: {
+            type: String,
+            required: function () { return this.isInitialMessage; },
         },
     },
     {

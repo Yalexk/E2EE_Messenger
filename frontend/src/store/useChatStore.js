@@ -254,18 +254,6 @@ export const useChatStore = create((set, get) => ({
         return sharedSecretBase64;
     },
 
-    getMyIdentityKey: async (userId) => {
-        try {
-            const res = await axiosInstance.get(`/messages/myIdentityKey/${userId}`);
-            const identityKey = res.data.identityKeyPublic;
-            console.log("My Identity Key:", identityKey);
-            return identityKey;
-        } catch (error) {
-            console.error("Error fetching my identity key:", error);
-            return null;
-        }
-    },
-
     sendInitialMessage: async () => {
         try {
             const { selectedUser, sharedSecret, ephemeralKeyPublic, otkKeyId } = get();

@@ -1,6 +1,5 @@
 import React, { useEffect } from 'react';
 import { useChatStore } from '../store/useChatStore.js';
-import { useAuthStore } from '../store/useAuthStore.js';
 
 const Sidebar = () => {
   const {
@@ -22,16 +21,13 @@ const Sidebar = () => {
   const handleUserClick = async (user) => {
     setSelectedUser(user);
   
-    loadKeysFromStorage();
+    await loadKeysFromStorage();
 
     await fetchRecipientKeys(user._id);
 
     await createSharedSecret();
 
-    const senderIdentityKey = useAuthStore.getState().identityKeyPublic;    
-    console.log("My Identity Key:", senderIdentityKey);
-
-    await sendInitialMessage(senderIdentityKey);
+    await sendInitialMessage();
     
   }
 

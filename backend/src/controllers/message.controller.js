@@ -56,7 +56,6 @@ export const getKeys = async (receiverId) => {
             await receiver.save();
         }
 
-
         const keys = {
             identityKey: receiver.identityKey,
             edIdentityKey: receiver.edIdentityKey,
@@ -142,7 +141,7 @@ export const sendInitialMessage = async (req, res) => {
             text: encryptedMessage,
             isInitialMessage: true,
             ephemeralKeyPublic,
-            senderIdentityKey,
+            senderIdentityKey: req.user.identityKey,
             otkKeyId,
             nonce,
         });
@@ -161,4 +160,4 @@ export const sendInitialMessage = async (req, res) => {
         console.error("Error sending initial message:", error.message);
         res.status(500).json({ message: "Internal server error" });
     };
-}
+};

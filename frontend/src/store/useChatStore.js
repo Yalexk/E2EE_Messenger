@@ -154,7 +154,6 @@ export const useChatStore = create((set, get) => ({
     },
 
     fetchRecipientKeys: async (userId) => {
-        // maybe need to also verify with the info in the storage
         try {
             const res = await axiosInstance.get(`/messages/keys/${userId}`);
             const keys = res.data;
@@ -169,13 +168,15 @@ export const useChatStore = create((set, get) => ({
                 edIdentityKey
             );
 
-            console.log("Keys fetched:", keys);
             console.log("Signature valid:", isValid);
 
         if (!isValid) {
             console.error("Invalid signedPreKey: Signature verification failed.");
             return null; 
         }
+
+        console.log("Keys fetched:", keys);
+
 
         set({ recipientKeyBundle: keys });
         return keys;
@@ -187,7 +188,14 @@ export const useChatStore = create((set, get) => ({
     },
 
     loadKeysFromStorage: () => {
-        const privateKeyData = localStorage.getItem('privateKeys');
+        const { identityKeySecret, oneTimePreKeys_secret } = get();
+        if (identityKeySecret && oneTimePreKeys_secret) {
+            console.log("Private identity keys already loaded from state.");
+            return;
+        }
+
+        // Load private identity keys from localStorage
+        const privateKeyData = localStorage.getItem('identityPrivateKeys');
 
         try {
             const parsed = JSON.parse(privateKeyData);
@@ -195,6 +203,7 @@ export const useChatStore = create((set, get) => ({
                 identityKeySecret: parsed.identityKeySecret,
                 oneTimePreKeys: parsed.oneTimePreKeys,
             });
+            console.log(" Private identity keys loaded from localStorage:", parsed.identityKeySecret);
         } catch (error) {
             console.error("Failed to load identity keys from localStorage:", error);
         }
@@ -245,9 +254,22 @@ export const useChatStore = create((set, get) => ({
         return sharedSecretBase64;
     },
 
-    sendInitialMessage: async (senderIdentityKey) => {
+    getMyIdentityKey: async (userId) => {
+        try {
+            const res = await axiosInstance.get(`/messages/myIdentityKey/${userId}`);
+            const identityKey = res.data.identityKeyPublic;
+            console.log("My Identity Key:", identityKey);
+            return identityKey;
+        } catch (error) {
+            console.error("Error fetching my identity key:", error);
+            return null;
+        }
+    },
+
+    sendInitialMessage: async () => {
         try {
             const { selectedUser, sharedSecret, ephemeralKeyPublic, otkKeyId } = get();
+            // encrypt the intitial message using the shared secret
             const initialMessage = "Hello, this is a secure message!";
             const messageUint8 = naclUtil.decodeUTF8(initialMessage);
             const keyUint8 = naclUtil.decodeBase64(sharedSecret);
@@ -262,7 +284,6 @@ export const useChatStore = create((set, get) => ({
                 encryptedMessage,    // encrypted message using shared secret
                 nonce: encodedNonce, // nonce in base64
                 ephemeralKeyPublic,  // base64 string
-                senderIdentityKey, // base64 string
                 otkKeyId             // key id for one-time prekey, if used else null
             };
 
@@ -272,8 +293,6 @@ export const useChatStore = create((set, get) => ({
         } catch (error) {
             console.error("Error sending initial message:", error);
         }
-
-        
     },
 
 }));

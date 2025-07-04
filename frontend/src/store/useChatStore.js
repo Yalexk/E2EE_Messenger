@@ -18,7 +18,8 @@ export const useChatStore = create((set, get) => ({
 
     // Private keys
     identityKeySecret: null,
-    oneTimePreKeys_secret: [],
+    oneTimePreKeysSecret: [],
+    signedPreKeySecret: null,
     
     sharedSecret: null,
 
@@ -67,81 +68,84 @@ export const useChatStore = create((set, get) => ({
         if (!selectedUser) return;
 
         const socket = useAuthStore.getState().socket;
+        
+        // Remove previous listeners to avoid duplicates
+        socket.off("newMessage");
+        socket.off("initialMessage");
 
-        socket.on("newMessage", (newMessage) => {            
-            const sentByYou = newMessage.senderId === selectedUser._id;
-            if (!sentByYou) return;
-           
-            set((state) => ({
-                messages: [...state.messages, newMessage]
-            }));
-        });
-        /*
-        // Receiving the initial message from A to B
-        socket.on("initialMessage", async (msg) => {
-            // 2. Reconstruct the shared secret
-            const { ephemeralKeyPublic, otkKeyId, edIdentityKey, nonce, encryptedMessage } = msg;
-
-            // Load your own private keys from storage/state
-            const identityKeySecret = useChatStore.getState().identityKey; // base64
-            const signedPreKeySecret = useChatStore.getState().signedPreKey; // base64
-            const oneTimePreKeys_secret = useChatStore.getState().oneTimePreKeys_secret; // array of base64
-            // Find the correct OTK by otkKeyId if present
-
+        // Bob receives the initial message from Alice
+        socket.on("initialMessage", async (initialMessage) => {
+            console.log("Initial message received:", initialMessage);
+            const { ephemeralKeyPublic, otkKeyId, senderIdentityKey, nonce, messageText } = initialMessage;
+            const { identityKeySecret, oneTimePreKeysSecret, signedPreKeySecret } = get();
             // Decode keys
-            const IKb = naclUtil.decodeBase64(identityKeySecret);
+            const IKa = naclUtil.decodeBase64(senderIdentityKey);
             const SPKb = naclUtil.decodeBase64(signedPreKeySecret);
-            const EKa_public = naclUtil.decodeBase64(ephemeralKeyPublic);
+            const EKa = naclUtil.decodeBase64(ephemeralKeyPublic);
+            const IKb = naclUtil.decodeBase64(identityKeySecret);
 
-            // If OTK is used
-            let OPKb;
-            if (otkKeyId) {
-                const otk = oneTimePreKeys.find(k => k.id === otkKeyId);
-                if (otk) OPKb = naclUtil.decodeBase64(otk.secret);
+            // Find the correct OTK by otkKeyId if present
+            let OPKb = null;
+            if (otkKeyId != null) {
+                console.log("Getting the one time prekey from ", oneTimePreKeysSecret);
+                console.log("otkKeyId:", otkKeyId);
+                OPKb = get().oneTimePreKeysSecret.find(k => k.id === otkKeyId);
+                if (!OPKb) {
+                    console.error("One-time prekey not found for ID:", otkKeyId);
+                    return;
+                }
             }
 
-            // 2.1. Perform X3DH DHs (recipient side)
-            // DH1: DH(IKb, EKa_public)
-            const dh1 = nacl.scalarMult(IKb, EKa_public);
-            // DH2: DH(SPKb, EKa_public)
-            const dh2 = nacl.scalarMult(SPKb, EKa_public);
-            // DH3: DH(IKb, EKa_public) (same as dh1, but keep for clarity)
-            // DH4: DH(OPKb, EKa_public) if OTK present
-            let concatSecrets;
-            if (OPKb) {
-                const dh4 = nacl.scalarMult(OPKb, EKa_public);
-                concatSecrets = new Uint8Array(dh1.length + dh2.length + dh4.length);
-                concatSecrets.set(dh1, 0);
-                concatSecrets.set(dh2, dh1.length);
-                concatSecrets.set(dh4, dh1.length + dh2.length);
-            } else {
-                concatSecrets = new Uint8Array(dh1.length + dh2.length);
-                concatSecrets.set(dh1, 0);
-                concatSecrets.set(dh2, dh1.length);
-            }
+            const dh1 = nacl.scalarMult(IKa, SPKb);
+            const dh2 = nacl.scalarMult(EKa, IKb);
+            const dh3 = nacl.scalarMult(EKa, SPKb); 
+
+            let dh4 = new Uint8Array();
+            if (OPKb) dh4 = nacl.scalarMult(EKa, OPKb);
+            
+
+           // Concatenate all secretes
+            const concatSecrets = new Uint8Array(
+                dh1.length + dh2.length + dh3.length + dh4.length
+            );
+
+            concatSecrets.set(dh1, 0);
+            concatSecrets.set(dh2, dh1.length);
+            concatSecrets.set(dh3, dh1.length + dh2.length);
+            concatSecrets.set(dh4, dh1.length + dh2.length + dh3.length);
 
             // 2.2. Derive shared secret
             const sk = await crypto.subtle.digest('SHA-256', concatSecrets);
             const sharedSecret = new Uint8Array(sk);
 
             // 3. Decrypt the message
+            console.log("Encrypted message base64:", messageText);
             const nonceUint8 = naclUtil.decodeBase64(nonce);
-            const encryptedUint8 = naclUtil.decodeBase64(encryptedMessage);
+            const encryptedUint8 = naclUtil.decodeBase64(messageText);
             const decrypted = nacl.secretbox.open(encryptedUint8, nonceUint8, sharedSecret);
 
-            let text;
+            let message;
             if (decrypted) {
-                text = naclUtil.encodeUTF8(decrypted);
+                message = naclUtil.encodeUTF8(decrypted);
+                console.log(`Decrypted message: ${message}`);
             } else {
-                text = "[Failed to decrypt]";
+                message = "[Failed to decrypt]";
+                console.log("Decryption failed.");
             }
 
-            // Add to messages
+        });
+
+        socket.on("newMessage", (newMessage) => {            
+            const sentByYou = newMessage.senderId === selectedUser._id;
+            if (!sentByYou) return;
+
+            console.log("New message received:", newMessage);
+           
             set((state) => ({
-                messages: [...state.messages, { ...msg, text }]
+                messages: [...state.messages, newMessage]
             }));
         });
-        */
+        
     },
 
     deafenMessages: () => {
@@ -188,20 +192,21 @@ export const useChatStore = create((set, get) => ({
     },
 
     loadKeysFromStorage: () => {
-        const { identityKeySecret, oneTimePreKeys_secret } = get();
-        if (identityKeySecret && oneTimePreKeys_secret) {
+        const { identityKeySecret, oneTimePreKeysSecret } = get();
+        if (identityKeySecret && oneTimePreKeysSecret) {
             console.log("Private identity keys already loaded from state.");
             return;
         }
 
         // Load private identity keys from localStorage
-        const privateKeyData = localStorage.getItem('identityPrivateKeys');
+        const privateKeyData = localStorage.getItem('privateKeys');
 
         try {
             const parsed = JSON.parse(privateKeyData);
             set({
                 identityKeySecret: parsed.identityKeySecret,
                 oneTimePreKeys: parsed.oneTimePreKeys,
+                signedPreKeySecret: parsed.signedPreKeySecret,
             });
             console.log(" Private identity keys loaded from localStorage:", parsed.identityKeySecret);
         } catch (error) {
@@ -230,7 +235,7 @@ export const useChatStore = create((set, get) => ({
         // Check for one time prekey
         let dh4 = new Uint8Array();
         if (recipientKeyBundle.oneTimePreKey) {
-            const OPKb = naclUtil.decodeBase64(recipientKeyBundle.oneTimePreKey);
+            const OPKb = naclUtil.decodeBase64(recipientKeyBundle.oneTimePreKey.publicKey);
             dh4 = nacl.scalarMult(EKa, OPKb);
             set ({ otkKeyId: recipientKeyBundle.otkKeyId });
         }

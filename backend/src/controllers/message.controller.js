@@ -50,8 +50,12 @@ export const getKeys = async (receiverId) => {
         if (receiver.oneTimePreKeys && receiver.oneTimePreKeys.length > 0) {
             oneTimePreKeys = receiver.oneTimePreKeys;
             otkKeyId = Math.floor(Math.random() * oneTimePreKeys.length);
-            oneTimePreKey = oneTimePreKeys[otkKeyId];
-            oneTimePreKeys.splice(otkKeyId, 1);
+            oneTimePreKey = oneTimePreKeys.find(key => key.id === otkKeyId);
+
+
+            // Dlete the OTK
+            const index = oneTimePreKeys.findIndex(key => key.id === otkKeyId);
+            oneTimePreKeys.splice(index, 1);
             receiver.oneTimePreKeys = oneTimePreKeys;
             await receiver.save();
         }
@@ -96,14 +100,14 @@ export const getKeysRoute = async (req, res) => {
 // TODO gonna need to change this later to include e2ee - for now just a simple text message
 export const sendMessage = async (req, res) => {    
     try {
-        const { text } = req.body;
+        const { messageText } = req.body;
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
 
         const newMessage = new Message({
             senderId,
             receiverId,
-            text
+            messageText
         });
 
         await newMessage.save();
@@ -127,21 +131,21 @@ export const sendInitialMessage = async (req, res) => {
     try {
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
+        const senderIdentityKey = req.user.identityKey;
         const {
             encryptedMessage, 
             nonce,
             ephemeralKeyPublic,
-            senderIdentityKey,
             otkKeyId,
         } = req.body;
     
         const initialMessage = new Message({
             senderId,
             receiverId,
-            text: encryptedMessage,
+            messageText: encryptedMessage,
             isInitialMessage: true,
             ephemeralKeyPublic,
-            senderIdentityKey: req.user.identityKey,
+            senderIdentityKey,
             otkKeyId,
             nonce,
         });

@@ -42,13 +42,25 @@ export const useAuthStore = create((set, get) => ({
                 edIdentityKeyPair.secretKey
             );
 
-            const oneTimePreKeysPublic = [];
-            const oneTimePreKeysPrivate = [];
+            const oneTimePreKeys = [];
             for (let i = 0; i < 10; i++) {
-                const keyPair = nacl.box.keyPair();
-                oneTimePreKeysPublic.push(naclUtil.encodeBase64(keyPair.publicKey));
-                oneTimePreKeysPrivate.push(naclUtil.encodeBase64(keyPair.secretKey));
+                const { publicKey, secretKey } = nacl.box.keyPair();
+                oneTimePreKeys.push({
+                    id: i,
+                    publicKey: naclUtil.encodeBase64(publicKey),
+                    privateKey: naclUtil.encodeBase64(secretKey),
+                });
             }
+
+            const publicPrekeys = oneTimePreKeys.map(k => ({
+                id: k.id,
+                publicKey: k.publicKey
+            }));
+
+            const privatePreKeys = oneTimePreKeys.map(k => ({
+                id: k.id,
+                privateKey: k.privateKey
+            }));
 
             const identityKey = naclUtil.encodeBase64(identityKeyPair.publicKey);
             const edIdentityKey = naclUtil.encodeBase64(edIdentityKeyPair.publicKey);
@@ -59,12 +71,14 @@ export const useAuthStore = create((set, get) => ({
                 identityKeySecret: naclUtil.encodeBase64(identityKeyPair.secretKey),
                 edIdentityKeySecret: naclUtil.encodeBase64(edIdentityKeyPair.secretKey),
                 signedPreKeySecret: naclUtil.encodeBase64(signedPreKeyPair.secretKey),
-                oneTimePreKeysSecret: oneTimePreKeysPrivate,
+                oneTimePreKeysSecret: privatePreKeys,
             };
             
-            // TODO Encrypt the private key with the password and store it in local storage
             const privateKeysString = JSON.stringify(privateKeys);
             localStorage.setItem('privateKeys', privateKeysString); 
+
+            // TODO Encrypt the private key with the password and store it in local storage
+
 
             const res = await axiosInstance.post("/auth/signup", {
                 ...data,
@@ -72,7 +86,7 @@ export const useAuthStore = create((set, get) => ({
                 edIdentityKey,
                 signedPreKey,
                 signedPreKeySignature: signedPreKeySignatureBase64,
-                oneTimePreKeys: oneTimePreKeysPublic,
+                oneTimePreKeys: publicPrekeys,
             });
 
             set({ authUser: res.data })

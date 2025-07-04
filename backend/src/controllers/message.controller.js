@@ -128,23 +128,23 @@ export const sendInitialMessage = async (req, res) => {
     try {
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
-        const edIdentityKey = req.user.edIdentityKey;
         const {
             encryptedMessage, 
             nonce,
             ephemeralKeyPublic,
+            senderIdentityKey,
             otkKeyId,
         } = req.body;
     
         const initialMessage = new Message({
-            text: encryptedMessage,
             senderId,
             receiverId,
+            text: encryptedMessage,
             isInitialMessage: true,
             ephemeralKeyPublic,
+            senderIdentityKey,
             otkKeyId,
             nonce,
-            edIdentityKey,
         });
 
         await initialMessage.save();

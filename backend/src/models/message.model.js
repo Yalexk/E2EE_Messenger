@@ -23,12 +23,12 @@ const messageSchema = new mongoose.Schema(
             type: String,
             required: function () { return this.isInitialMessage; },
         },
-        otkKeyId: {
-            type: String,
-        },
-        edIdentityKey: {
+        senderIdentityKey: {
             type: String,
             required: function () { return this.isInitialMessage; },
+        },
+        otkKeyId: {
+            type: String,
         },
         nonce: {
             type: String,

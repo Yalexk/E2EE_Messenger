@@ -20,15 +20,7 @@ const Sidebar = () => {
 
   const handleUserClick = async (user) => {
     setSelectedUser(user);
-  
-    await loadKeysFromStorage();
-
-    await fetchRecipientKeys(user._id);
-
-    await createSharedSecret();
-
     await sendInitialMessage();
-    
   }
 
   if (isUsersLoading) {

@@ -15,6 +15,9 @@ export const useChatStore = create((set, get) => ({
     // Recipient key bundle containing public keys of the recipient
     // This will be fetched from the server when a user is selected
     recipientKeyBundle: null,
+   
+    // 
+    sessionEstablished: false,
 
     // Private keys
     identityKeySecret: null,
@@ -75,9 +78,19 @@ export const useChatStore = create((set, get) => ({
 
         // Bob receives the initial message from Alice
         socket.on("initialMessage", async (initialMessage) => {
+            if (get().sessionEstablished) {
+                console.log("Session already established, ignoring initial message.");
+                return;
+            }   
+            
             console.log("Initial message received:", initialMessage);
-            const { ephemeralKeyPublic, otkKeyId, senderIdentityKey, nonce, messageText } = initialMessage;
+
+            set ({ sessionEstablished: true });
+            console.log("Session established:", get().sessionEstablished);
+            
+            await get().loadKeysFromStorage();
             const { identityKeySecret, oneTimePreKeysSecret, signedPreKeySecret } = get();
+            const { ephemeralKeyPublic, otkKeyId, senderIdentityKey, nonce, messageText } = initialMessage;
             // Decode keys
             const IKa = naclUtil.decodeBase64(senderIdentityKey);
             const SPKb = naclUtil.decodeBase64(signedPreKeySecret);
@@ -86,7 +99,7 @@ export const useChatStore = create((set, get) => ({
 
             // Find the correct OTK by otkKeyId if present
             let OPKb = null;
-            if (otkKeyId != null) {
+            if (otkKeyId && otkKeyId !== "null" && otkKeyId !== "undefined") {
                 console.log("Getting the one time prekey from ", oneTimePreKeysSecret);
                 console.log("otkKeyId:", otkKeyId);
                 OPKb = get().oneTimePreKeysSecret.find(k => k.id === otkKeyId);
@@ -116,13 +129,19 @@ export const useChatStore = create((set, get) => ({
 
             // 2.2. Derive shared secret
             const sk = await crypto.subtle.digest('SHA-256', concatSecrets);
-            const sharedSecret = new Uint8Array(sk);
+            const sharedSecret = naclUtil.encodeBase64(new Uint8Array(sk));
+            set({ sharedSecret });
+            console.log("Session established after receiving initial message:", get().sessionEstablished);
+
+
+            console.log("Receiver's shared secret created from the sender:", sharedSecret);
 
             // 3. Decrypt the message
             console.log("Encrypted message base64:", messageText);
             const nonceUint8 = naclUtil.decodeBase64(nonce);
             const encryptedUint8 = naclUtil.decodeBase64(messageText);
-            const decrypted = nacl.secretbox.open(encryptedUint8, nonceUint8, sharedSecret);
+            const keyUint8 = naclUtil.decodeBase64(sharedSecret);
+            const decrypted = nacl.secretbox.open(encryptedUint8, nonceUint8, keyUint8);
 
             let message;
             if (decrypted) {
@@ -205,63 +224,78 @@ export const useChatStore = create((set, get) => ({
             const parsed = JSON.parse(privateKeyData);
             set({
                 identityKeySecret: parsed.identityKeySecret,
-                oneTimePreKeys: parsed.oneTimePreKeys,
+                oneTimePreKeysSecret: parsed.oneTimePreKeysSecret,
                 signedPreKeySecret: parsed.signedPreKeySecret,
             });
-            console.log(" Private identity keys loaded from localStorage:", parsed.identityKeySecret);
+            console.log(" Private identity keys loaded from localStorage:", parsed.identityKeySecret, parsed.oneTimePreKeys, parsed.signedPreKeySecret);
         } catch (error) {
             console.error("Failed to load identity keys from localStorage:", error);
         }
     },
 
     createSharedSecret: async () => {
-        const { recipientKeyBundle, identityKeySecret } = get();
-        // Generate senders ephemeral key pair
-        const ephemeralKeyPair = nacl.box.keyPair();
-        const ephemeralKeyPublic = naclUtil.encodeBase64(ephemeralKeyPair.publicKey);
-        set({ ephemeralKeyPublic });
+        try {
+            await get().loadKeysFromStorage();
+            await get().fetchRecipientKeys(get().selectedUser._id);
 
-        // decode all keys from base64
-        const EKa = ephemeralKeyPair.secretKey;
-        const IKa = naclUtil.decodeBase64(identityKeySecret)
-        const IKb = naclUtil.decodeBase64(recipientKeyBundle.identityKey);
-        const SPKb = naclUtil.decodeBase64(recipientKeyBundle.signedPreKey);
+            const { recipientKeyBundle, identityKeySecret } = get();
+            // Generate senders ephemeral key pair
+            const ephemeralKeyPair = nacl.box.keyPair();
+            const ephemeralKeyPublic = naclUtil.encodeBase64(ephemeralKeyPair.publicKey);
+            set({ ephemeralKeyPublic });
 
-        // X3DH calculations
-        const dh1 = nacl.scalarMult(IKa, SPKb);
-        const dh2 = nacl.scalarMult(EKa, IKb);
-        const dh3 = nacl.scalarMult(EKa, SPKb); 
+            // decode all keys from base64
+            const EKa = ephemeralKeyPair.secretKey;
+            const IKa = naclUtil.decodeBase64(identityKeySecret)
+            const IKb = naclUtil.decodeBase64(recipientKeyBundle.identityKey);
+            const SPKb = naclUtil.decodeBase64(recipientKeyBundle.signedPreKey);
 
-        // Check for one time prekey
-        let dh4 = new Uint8Array();
-        if (recipientKeyBundle.oneTimePreKey) {
-            const OPKb = naclUtil.decodeBase64(recipientKeyBundle.oneTimePreKey.publicKey);
-            dh4 = nacl.scalarMult(EKa, OPKb);
-            set ({ otkKeyId: recipientKeyBundle.otkKeyId });
+            // X3DH calculations
+            const dh1 = nacl.scalarMult(IKa, SPKb);
+            const dh2 = nacl.scalarMult(EKa, IKb);
+            const dh3 = nacl.scalarMult(EKa, SPKb); 
+
+            // Check for one time prekey
+            let dh4 = new Uint8Array();
+            if (recipientKeyBundle.oneTimePreKey) {
+                const OPKb = naclUtil.decodeBase64(recipientKeyBundle.oneTimePreKey.publicKey);
+                dh4 = nacl.scalarMult(EKa, OPKb);
+                set ({ otkKeyId: recipientKeyBundle.otkKeyId });
+            }
+
+            // Concatenate all secretes
+            const concatSecrets = new Uint8Array(
+                dh1.length + dh2.length + dh3.length + dh4.length
+            );
+
+            concatSecrets.set(dh1, 0);
+            concatSecrets.set(dh2, dh1.length);
+            concatSecrets.set(dh3, dh1.length + dh2.length);
+            concatSecrets.set(dh4, dh1.length + dh2.length + dh3.length);
+
+            // Derive final shared secret using SHA-256 Hashing
+            const sk = await crypto.subtle.digest('SHA-256', concatSecrets);
+            const sharedSecretBase64 = naclUtil.encodeBase64(new Uint8Array(sk));
+
+            set({ sharedSecret: sharedSecretBase64 })
+            console.log("Shared secret created:", sharedSecretBase64);
+            return sharedSecretBase64;
+        } catch (error) {
+            console.error("Error creating shared secret:", error);
+            return null;
         }
-
-        // Concatenate all secretes
-        const concatSecrets = new Uint8Array(
-            dh1.length + dh2.length + dh3.length + dh4.length
-        );
-
-        concatSecrets.set(dh1, 0);
-        concatSecrets.set(dh2, dh1.length);
-        concatSecrets.set(dh3, dh1.length + dh2.length);
-        concatSecrets.set(dh4, dh1.length + dh2.length + dh3.length);
-
-        // Derive final shared secret using SHA-256 Hashing
-        const sk = await crypto.subtle.digest('SHA-256', concatSecrets);
-        const sharedSecretBase64 = naclUtil.encodeBase64(new Uint8Array(sk));
-
-        set({ sharedSecret: sharedSecretBase64 })
-        console.log("Shared secret created:", sharedSecretBase64);
-        return sharedSecretBase64;
     },
 
     sendInitialMessage: async () => {
         try {
+            if (get().sessionEstablished) {
+                console.log("Session already established, not sending initial message.");
+                return;
+            }
+            set({ sessionEstablished: true });
+            await get().createSharedSecret();
             const { selectedUser, sharedSecret, ephemeralKeyPublic, otkKeyId } = get();
+
             // encrypt the intitial message using the shared secret
             const initialMessage = "Hello, this is a secure message!";
             const messageUint8 = naclUtil.decodeUTF8(initialMessage);
@@ -283,6 +317,7 @@ export const useChatStore = create((set, get) => ({
             const res = await axiosInstance.post(`/messages/sendInitial/${selectedUser._id}`, payload);
 
             console.log("Initial message sent:", res.data);
+            console.log("Session established:", get().sessionEstablished);
         } catch (error) {
             console.error("Error sending initial message:", error);
         }

@@ -1,18 +1,16 @@
 import React, { useEffect } from 'react';
 import { useChatStore } from '../store/useChatStore.js';
+import { useSessionStore } from '../store/useSessionStore.js';
 
 const Sidebar = () => {
   const {
     getUsers,
     users,
     selectedUser,
-    setSelectedUser,
     isUsersLoading,
-    fetchRecipientKeys,
-    loadKeysFromStorage,
-    createSharedSecret,
-    sendInitialMessage,
   } = useChatStore();
+
+  const { setSelectedUser } = useSessionStore();
 
   useEffect(() => {
     getUsers();
@@ -20,8 +18,7 @@ const Sidebar = () => {
 
   const handleUserClick = async (user) => {
     setSelectedUser(user);
-    await sendInitialMessage();
-  }
+  };
 
   if (isUsersLoading) {
     return <div className="loading">Loading...</div>;

@@ -75,7 +75,7 @@ export const useAuthStore = create((set, get) => ({
             };
             
             const privateKeysString = JSON.stringify(privateKeys);
-            localStorage.setItem('privateKeys', privateKeysString); 
+            localStorage.setItem(`privateKeys${data.username}`, privateKeysString); 
 
             // TODO Encrypt the private key with the password and store it in local storage
 
@@ -89,7 +89,8 @@ export const useAuthStore = create((set, get) => ({
                 oneTimePreKeys: publicPrekeys,
             });
 
-            set({ authUser: res.data })
+            set({ authUser: res.data.user })
+            console.log("Signed up user:", res.data);
             get().connectSocket();
             window.alert("Signed up successfully.");
         } catch (error) {
@@ -103,7 +104,8 @@ export const useAuthStore = create((set, get) => ({
         set({ isLoggingIn: true });
         try {
             const res = await axiosInstance.post("/auth/login", data);
-            set({ authUser: res.data });
+            set({ authUser: res.data.user });
+            console.log("Logged in user:", res.data.user);
             window.alert("Logged in successfully.");
 
             get().connectSocket();

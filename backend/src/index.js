@@ -9,6 +9,7 @@ import { connectDB } from "./lib/db.js";
 
 import authRoutes from "./routes/auth.route.js";
 import messageRoutes from "./routes/message.route.js";
+import sessionRoutes from "./routes/session.route.js";
 import { app, server } from "./lib/socket.js";
 
 const options = {
@@ -27,7 +28,8 @@ const options = {
     },
     apis: [
         "./src/routes/auth.route.js", 
-        "./src/routes/message.route.js"
+        "./src/routes/message.route.js",
+        "./src/routes/session.route.js",
     ],
 };
 
@@ -47,6 +49,7 @@ app.use(cors({
 
 app.use("/api/auth", authRoutes);
 app.use("/api/messages", messageRoutes);
+app.use("/api/session", sessionRoutes);
 
 server.listen(PORT, () => {
   console.log('Server is running on PORT: ' + PORT);

@@ -1,0 +1,269 @@
+import { create } from 'zustand';
+import { axiosInstance } from '../lib/axios.js';    
+import { useAuthStore } from './useAuthStore.js';
+import { useChatStore } from './useChatStore.js';
+import nacl from 'tweetnacl';
+import naclUtil from 'tweetnacl-util';
+
+export const useSessionStore = create((set, get) => ({
+    selectedUser: null,
+    recipientKeyBundle: null,
+    sessionEstablished: false,
+
+    // Private keys
+    identityKeySecret: null,
+    oneTimePreKeysSecret: [],
+    signedPreKeySecret: null,
+    
+    sharedSecret: null, // derived or created shared secret
+    ephemeralKeyPublic: null,
+    otkKeyId: null,
+
+    setSelectedUser: async (user) => {
+        if (get().selectedUser != user) {
+            set({ selectedUser: user });
+            useChatStore.setState({ selectedUser: user });
+
+            await get().fetchInitialMessage();
+            
+            if (!get().sessionEstablished) {
+                await get().sendInitialMessage();
+            }
+        } else {
+            console.log("User already selected:", user.username);
+        }
+    },
+
+    fetchRecipientKeys: async (userId) => {
+        try {
+            const res = await axiosInstance.get(`/messages/keys/${userId}`);
+            const keys = res.data;
+
+            const edIdentityKey = naclUtil.decodeBase64(keys.edIdentityKey);
+            const signedPreKey = naclUtil.decodeBase64(keys.signedPreKey);
+            const signedPreKeySignature = naclUtil.decodeBase64(keys.signedPreKeySignature);
+
+            const isValid = nacl.sign.detached.verify(
+                signedPreKey,
+                signedPreKeySignature,
+                edIdentityKey
+            );
+
+            console.log("Signature valid:", isValid);
+
+        if (!isValid) {
+            console.error("Invalid signedPreKey: Signature verification failed.");
+            return null; 
+        }
+
+        console.log("Keys fetched:", keys);
+
+
+        set({ recipientKeyBundle: keys });
+        return keys;
+
+        } catch (error) {
+            console.error("Error fetching recipient keys:", error);
+            return null;
+        }
+    },
+
+    loadKeysFromStorage: () => {
+        const { identityKeySecret, oneTimePreKeysSecret } = get();
+        if (identityKeySecret && oneTimePreKeysSecret) {
+            console.log("Private identity keys already loaded from state.");
+            return;
+        }
+
+        // Load private identity keys from localStorage
+        const authUser = useAuthStore.getState().authUser;
+        const privateKeyData = localStorage.getItem(`privateKeys${authUser.username}`);
+
+        try {
+            const parsed = JSON.parse(privateKeyData);
+            set({
+                identityKeySecret: parsed.identityKeySecret,
+                oneTimePreKeysSecret: parsed.oneTimePreKeysSecret,
+                signedPreKeySecret: parsed.signedPreKeySecret,
+            });
+            console.log(" Private identity keys loaded from localStorage:", parsed.identityKeySecret, parsed.oneTimePreKeysSecret, parsed.signedPreKeySecret);
+        } catch (error) {
+            console.error("Failed to load identity keys from localStorage:", error);
+        }
+    },
+
+    createSharedSecretForSending: async () => {
+        try {
+            await get().loadKeysFromStorage();
+            await get().fetchRecipientKeys(get().selectedUser._id);
+
+            const { recipientKeyBundle, identityKeySecret } = get();
+            // Generate senders ephemeral key pair
+            const ephemeralKeyPair = nacl.box.keyPair();
+            const ephemeralKeyPublic = naclUtil.encodeBase64(ephemeralKeyPair.publicKey);
+            set({ ephemeralKeyPublic });
+
+            // decode all keys from base64
+            const EKa = ephemeralKeyPair.secretKey;
+            const IKa = naclUtil.decodeBase64(identityKeySecret)
+            const IKb = naclUtil.decodeBase64(recipientKeyBundle.identityKey);
+            const SPKb = naclUtil.decodeBase64(recipientKeyBundle.signedPreKey);
+
+            // X3DH calculations
+            const dh1 = nacl.scalarMult(IKa, SPKb);
+            const dh2 = nacl.scalarMult(EKa, IKb);
+            const dh3 = nacl.scalarMult(EKa, SPKb); 
+
+            // Check for one time prekey
+            let dh4 = new Uint8Array();
+            if (recipientKeyBundle.oneTimePreKey) {
+                const OPKb = naclUtil.decodeBase64(recipientKeyBundle.oneTimePreKey.publicKey);
+                dh4 = nacl.scalarMult(EKa, OPKb);
+                set ({ otkKeyId: recipientKeyBundle.otkKeyId });
+            }
+
+            // Concatenate all secretes
+            const concatSecrets = new Uint8Array(
+                dh1.length + dh2.length + dh3.length + dh4.length
+            );
+
+            concatSecrets.set(dh1, 0);
+            concatSecrets.set(dh2, dh1.length);
+            concatSecrets.set(dh3, dh1.length + dh2.length);
+            concatSecrets.set(dh4, dh1.length + dh2.length + dh3.length);
+
+            // Derive final shared secret using SHA-256 Hashing
+            const sk = await crypto.subtle.digest('SHA-256', concatSecrets);            
+            const sharedSecretBase64 = naclUtil.encodeBase64(new Uint8Array(sk));
+            set({ sharedSecret: sharedSecretBase64 })
+            console.log("Shared secret created:", sharedSecretBase64);
+            return sharedSecretBase64;
+        } catch (error) {
+            console.error("Error creating shared secret:", error);
+            return null;
+        }
+    },
+
+    sendInitialMessage: async () => {
+        try {
+            set({ sessionEstablished: true });
+            await get().createSharedSecretForSending();
+            const { selectedUser, sharedSecret, ephemeralKeyPublic, otkKeyId } = get();
+
+            // encrypt the intitial message using the shared secret
+            const initialMessage = "Hello, this is a secure message!";
+            const messageUint8 = naclUtil.decodeUTF8(initialMessage);
+            const keyUint8 = naclUtil.decodeBase64(sharedSecret);
+            const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
+            const encrypted = nacl.secretbox(messageUint8, nonce, keyUint8);
+
+            // Encode encrypted data and nonce for sending
+            const encryptedMessage = naclUtil.encodeBase64(encrypted);
+            const encodedNonce = naclUtil.encodeBase64(nonce);
+
+            const payload = {
+                encryptedMessage,    // encrypted message using shared secret
+                nonce: encodedNonce, // nonce in base64
+                ephemeralKeyPublic,  // base64 string
+                otkKeyId             // key id for one-time prekey, if used else null
+            };
+
+            const res = await axiosInstance.post(`/session/sendInitial/${selectedUser._id}`, payload);
+
+            console.log("Initial message sent:", res.data);
+            console.log("Session established:", get().sessionEstablished);
+        } catch (error) {
+            console.error("Error sending initial message:", error);
+        }
+    },
+
+    fetchInitialMessage: async () => {
+        try {
+            const { selectedUser } = get();
+            const res = await axiosInstance.get(`/session/initial/${selectedUser._id}`);
+
+            if (res.data) {
+                if (res.data.message === "Initial message not found") {
+                    console.log("No initial message found, session not established yet.");
+                    return;
+                }
+                console.log("Initial message received:", res.data);
+                set({ sessionEstablished: true });
+
+                await get().deriveSharedSecretFromInitialMessage(res.data);
+            }
+        } catch (error) {
+            console.error("Error fetching initial message:", error);
+        }
+    },
+
+    deriveSharedSecretFromInitialMessage: async (initialMessage) => {
+        try {
+            await get().loadKeysFromStorage();
+            const { identityKeySecret, oneTimePreKeysSecret, signedPreKeySecret } = get();
+            const { ephemeralKeyPublic, otkKeyId, senderIdentityKey, nonce, messageText } = initialMessage;
+            // Decode keys
+            const IKa = naclUtil.decodeBase64(senderIdentityKey);
+            const SPKb = naclUtil.decodeBase64(signedPreKeySecret);
+            const EKa = naclUtil.decodeBase64(ephemeralKeyPublic);
+            const IKb = naclUtil.decodeBase64(identityKeySecret);
+
+            // Find the correct OTK by otkKeyId if present
+            let OPKb = null;
+            if (otkKeyId && otkKeyId !== "null" && otkKeyId !== "undefined") {
+                console.log("Getting the one time prekey from ", oneTimePreKeysSecret);
+                console.log("otkKeyId:", otkKeyId);
+                OPKb = naclUtil.decodeBase64(get().oneTimePreKeysSecret.find(k => k.id == otkKeyId).privateKey);
+                if (!OPKb) {
+                    console.error("One-time prekey not found for ID:", otkKeyId);
+                    return;
+                }
+            }
+
+            const dh1 = nacl.scalarMult(SPKb, IKa);
+            const dh2 = nacl.scalarMult(IKb, EKa);
+            const dh3 = nacl.scalarMult(SPKb, EKa); 
+
+            let dh4 = new Uint8Array();
+            if (OPKb) dh4 = nacl.scalarMult(OPKb, EKa);
+            
+
+           // Concatenate all secretes
+            const concatSecrets = new Uint8Array(
+                dh1.length + dh2.length + dh3.length + dh4.length
+            );
+
+            concatSecrets.set(dh1, 0);
+            concatSecrets.set(dh2, dh1.length);
+            concatSecrets.set(dh3, dh1.length + dh2.length);
+            concatSecrets.set(dh4, dh1.length + dh2.length + dh3.length);
+
+            // 2.2. Derive shared secret
+            const sk = await crypto.subtle.digest('SHA-256', concatSecrets);            
+            const sharedSecret = naclUtil.encodeBase64(new Uint8Array(sk));
+            set({ sharedSecret });
+            console.log("Receiver's shared secret created from the sender:", sharedSecret);
+
+            // 3. Decrypt the message
+            console.log("Encrypted message base64:", messageText);
+            const nonceUint8 = naclUtil.decodeBase64(nonce);
+            const encryptedUint8 = naclUtil.decodeBase64(messageText);
+            const keyUint8 = naclUtil.decodeBase64(sharedSecret);
+            const decrypted = nacl.secretbox.open(encryptedUint8, nonceUint8, keyUint8);
+
+            let message;
+            if (decrypted) {
+                message = naclUtil.encodeUTF8(decrypted);
+                console.log(`Decrypted message: ${message}`);
+            } else {
+                message = "[Failed to decrypt]";
+                console.log("Decryption failed.");
+            }
+
+        } catch (error) {
+            console.error("Error deriving shared secret from initial message:", error);
+            return null;
+        }
+    }
+    
+}));

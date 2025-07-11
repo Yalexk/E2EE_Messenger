@@ -1,8 +1,7 @@
 import { create } from 'zustand';
 import { axiosInstance } from '../lib/axios.js';    
 import { useAuthStore } from './useAuthStore.js';
-import nacl from 'tweetnacl';
-import naclUtil from 'tweetnacl-util';
+
 
 export const useChatStore = create((set, get) => ({
     messages: [],
@@ -69,12 +68,17 @@ export const useChatStore = create((set, get) => ({
         if (!selectedUser) return;
 
         const socket = useAuthStore.getState().socket;
+        const authUser = useAuthStore.getState().authUser;
+
         
         socket.off("newMessage");
 
         socket.on("newMessage", (newMessage) => {            
-            const sentByYou = newMessage.senderId === selectedUser._id;
-            if (!sentByYou) return;
+            const isPartOfConversation = 
+            (newMessage.senderId === selectedUser._id && newMessage.receiverId === authUser._id) || 
+            (newMessage.senderId === authUser._id && newMessage.receiverId === selectedUser._id);
+
+            if (!isPartOfConversation) return;
 
             console.log("New message received:", newMessage);
            

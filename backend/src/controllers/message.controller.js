@@ -35,68 +35,6 @@ export const getMessages = async (req, res) => {
     }
 };
 
-export const getKeys = async (receiverId) => {
-    try {
-        const receiver = await User.findById(receiverId);
-        if (!receiver) {
-            return null;
-        }
-
-        // Check if the user has one-time prekeys available
-        let oneTimePreKeys = null;
-        let oneTimePreKey = null;
-        let otkKeyId = null;
-
-        if (receiver.oneTimePreKeys && receiver.oneTimePreKeys.length > 0) {
-            oneTimePreKeys = receiver.oneTimePreKeys;
-            otkKeyId = Math.floor(Math.random() * oneTimePreKeys.length);
-            oneTimePreKey = oneTimePreKeys.find(key => key.id === otkKeyId);
-
-
-            // Dlete the OTK
-            const index = oneTimePreKeys.findIndex(key => key.id === otkKeyId);
-            oneTimePreKeys.splice(index, 1);
-            receiver.oneTimePreKeys = oneTimePreKeys;
-            await receiver.save();
-        }
-
-        const keys = {
-            identityKey: receiver.identityKey,
-            edIdentityKey: receiver.edIdentityKey,
-            signedPreKey: receiver.signedPreKey,
-            signedPreKeySignature: receiver.signedPreKeySignature,
-        };
-
-        if (oneTimePreKeys !== null) {
-            keys.oneTimePreKey = oneTimePreKey;
-            keys.otkKeyId = otkKeyId;
-        }
-
-        return keys;
-
-    } catch(error) {
-        console.error("Error fetching keys:", error.message);
-        return null;
-    }
-}
-
-export const getKeysRoute = async (req, res) => {
-    try {
-        const { id: receiverId } = req.params;
-        const keys = await getKeys(receiverId);
-        if (!keys) {
-            return res.status(404).json({ message: "Receiver not found or no keys available" });
-        }
-
-        console.log("Keys fetched:", keys);
-        
-        res.status(200).json(keys);
-    } catch (error) {
-        console.error("Error in getKeysRoute:", error.message);
-        res.status(500).json({ message: "Internal server error" });
-    }
-};
-
 // TODO gonna need to change this later to include e2ee - for now just a simple text message
 export const sendMessage = async (req, res) => {    
     try {

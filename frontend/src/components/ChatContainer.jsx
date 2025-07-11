@@ -36,7 +36,7 @@ const ChatContainer = () => {
             ref={idx === messages.length - 1 ? messageEndRef : null}
           >
             <div className="chat-bubble">
-              <div className="text-sm">{message.message}</div>
+              <div className="text-sm">{message.messageText}</div>
               <div className="text-xs opacity-60 text-right">{formatTime(message.createdAt)}</div>
             </div>
           </div>

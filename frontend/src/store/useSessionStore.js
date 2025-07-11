@@ -36,7 +36,7 @@ export const useSessionStore = create((set, get) => ({
 
     fetchRecipientKeys: async (userId) => {
         try {
-            const res = await axiosInstance.get(`/messages/keys/${userId}`);
+            const res = await axiosInstance.get(`/session/keys/${userId}`);
             const keys = res.data;
 
             const edIdentityKey = naclUtil.decodeBase64(keys.edIdentityKey);

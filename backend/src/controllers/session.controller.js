@@ -27,6 +27,15 @@ export const sendInitialMessage = async (req, res) => {
 
         await initialMessage.save();
 
+        // Emit socket notification to the receiver
+        const receiverSocketId = getReceiverSocketId(receiverId);
+        if (receiverSocketId) {
+            io.to(receiverSocketId).emit("sessionStarted", {
+                startedBy: senderId,
+                message: "New secure session started"
+            });
+        }
+
         console.log("Initial message sent:", initialMessage);
 
         res.status(201).json(initialMessage);

@@ -9,6 +9,7 @@ const ChatHeader = () => {
     const handleClose = async () => {
         await endSession();
         useChatStore.setState({ selectedUser: null });
+        useSessionStore.setState({ selectedUser: null });
     };
 
     return (

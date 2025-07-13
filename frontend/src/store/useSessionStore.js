@@ -315,16 +315,26 @@ export const useSessionStore = create((set, get) => ({
         const socket = useAuthStore.getState().socket;
         
         socket.off("sessionEnded");
+        socket.off("sessionStarted");
         
         socket.on("sessionEnded", (data) => {
             console.log("Session ended by other user:", data);
-            
-            // Reset session state when notified
             get().resetSession();
+        });
+
+        socket.on("sessionStarted", async (data) => {
+            console.log("Session started by other user:", data);
             
-            // Optionally show a notification to the user
-            // You can use a toast library or update UI state
-            console.log("Session has been ended by the other user");
+            // Only respond if we're currently chatting with this user
+            const { selectedUser } = get();
+            if (selectedUser && selectedUser._id === data.startedBy) {
+                console.log("Fetching initial message for current chat");
+                
+                // Fetch the initial message using existing HTTP route
+                await get().fetchInitialMessage();
+            } else {
+                console.log("Session started with different user, ignoring");
+            }
         });
     },
     

@@ -45,7 +45,7 @@ export const getInitialMessage = async (req, res) => {
             senderId,
             receiverId,
             isInitialMessage: true
-        });
+        }).sort({ createdAt: -1 });
 
         if (!initialMessage) {
             return res.status(200).json({ message: "Initial message not found" });

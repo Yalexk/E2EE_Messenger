@@ -21,8 +21,15 @@ export const useSessionStore = create((set, get) => ({
 
     setSelectedUser: async (user) => {
         if (get().selectedUser != user) {
+            // End the previous session if it exists
+            if (get().selectedUser && get().sessionEstablished) {
+                await get().endSession();
+            }
+
             set({ selectedUser: user });
             useChatStore.setState({ selectedUser: user });
+
+            get().listenToSessionEvents();
 
             await get().fetchInitialMessage();
             
@@ -264,6 +271,61 @@ export const useSessionStore = create((set, get) => ({
             console.error("Error deriving shared secret from initial message:", error);
             return null;
         }
-    }
+    },
+
+    endSession: async () => {
+        try {
+            const { selectedUser } = get();
+            if (!selectedUser) return;
+
+            // Notify the other user that the session is ending
+            await axiosInstance.post(`/session/endSession/${selectedUser._id}`);
+            
+            // Reset local session state
+            set({
+                sessionEstablished: false,
+                sharedSecret: null,
+                ephemeralKeyPublic: null,
+                otkKeyId: null,
+                recipientKeyBundle: null
+            });
+            
+            console.log("Session ended for user:", selectedUser.username);
+        } catch (error) {
+            console.error("Error ending session:", error);
+        }
+    },
+
+    resetSession: () => {
+        set({
+            sessionEstablished: false,
+            sharedSecret: null,
+            ephemeralKeyPublic: null,
+            otkKeyId: null,
+            recipientKeyBundle: null
+        });
+        
+        // Stop listening to messages for this session
+        useChatStore.getState().deafenMessages();
+        
+        console.log("Session reset");
+    },
+
+    listenToSessionEvents: () => {
+        const socket = useAuthStore.getState().socket;
+        
+        socket.off("sessionEnded");
+        
+        socket.on("sessionEnded", (data) => {
+            console.log("Session ended by other user:", data);
+            
+            // Reset session state when notified
+            get().resetSession();
+            
+            // Optionally show a notification to the user
+            // You can use a toast library or update UI state
+            console.log("Session has been ended by the other user");
+        });
+    },
     
 }));

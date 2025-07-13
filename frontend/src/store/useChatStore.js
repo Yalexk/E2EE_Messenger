@@ -10,27 +10,8 @@ export const useChatStore = create((set, get) => ({
     users: [],
     isUsersLoading: false,
     isMessagesLoading: false,
+    selectedUser: null,
     
-    // Recipient key bundle containing public keys of the recipient
-    // This will be fetched from the server when a user is selected
-    recipientKeyBundle: null,
-   
-    // 
-    sessionEstablished: false,
-
-    // Private keys
-    identityKeySecret: null,
-    oneTimePreKeysSecret: [],
-    signedPreKeySecret: null,
-    
-    sharedSecret: null,
-
-    // to be set after creating shared secret
-    ephemeralKeyPublic: null,
-    otkKeyId: null,
-    // also need to send the public identity key of the sender to verify
-
-
     getUsers: async () => {
         set({ isUsersLoading: true });
         try {

@@ -38,11 +38,12 @@ export const getMessages = async (req, res) => {
 // TODO gonna need to change this later to include e2ee - for now just a simple text message
 export const sendMessage = async (req, res) => {    
     try {
-        const { messageText, nonce  } = req.body;
+        const { messageText, nonce, sessionId  } = req.body;
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
 
         const newMessage = new Message({
+            sessionId,
             senderId,
             receiverId,
             messageText,

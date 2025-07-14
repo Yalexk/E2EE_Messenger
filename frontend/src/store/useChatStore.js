@@ -78,10 +78,12 @@ export const useChatStore = create((set, get) => ({
             const keyUint8 = naclUtil.decodeBase64(sharedSecret);
             const nonce = nacl.randomBytes(nacl.secretbox.nonceLength);
             const encrypted = nacl.secretbox(messageUint8, nonce, keyUint8);
+            const sessionId = useSessionStore.getState().sessionId;
             
             const payload = {
                 messageText: naclUtil.encodeBase64(encrypted),
                 nonce: naclUtil.encodeBase64(nonce),
+                sessionId,
             }
 
             const res = await axiosInstance.post(`/messages/send/${selectedUser._id}`, payload);

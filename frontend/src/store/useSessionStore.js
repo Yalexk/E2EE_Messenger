@@ -9,6 +9,7 @@ export const useSessionStore = create((set, get) => ({
     selectedUser: null,
     recipientKeyBundle: null,
     sessionEstablished: false,
+    sessionId: null,
 
     // Private keys
     identityKeySecret: null,
@@ -168,7 +169,11 @@ export const useSessionStore = create((set, get) => ({
             const encryptedMessage = naclUtil.encodeBase64(encrypted);
             const encodedNonce = naclUtil.encodeBase64(nonce);
 
+            const sessionId = get().generateSessionId();
+            set({ sessionId });
+
             const payload = {
+                sessionId,           // unique session identifier
                 encryptedMessage,    // encrypted message using shared secret
                 nonce: encodedNonce, // nonce in base64
                 ephemeralKeyPublic,  // base64 string
@@ -179,6 +184,10 @@ export const useSessionStore = create((set, get) => ({
 
             console.log("Initial message sent:", res.data);
             console.log("Session established:", get().sessionEstablished);
+
+            // after session is established add the sessionID and shared secret to local storage
+            
+            
         } catch (error) {
             console.error("Error sending initial message:", error);
         }
@@ -283,6 +292,7 @@ export const useSessionStore = create((set, get) => ({
             
             // Reset local session state
             set({
+                sessionId: null,
                 sessionEstablished: false,
                 sharedSecret: null,
                 ephemeralKeyPublic: null,
@@ -299,6 +309,7 @@ export const useSessionStore = create((set, get) => ({
     resetSession: () => {
         set({
             sessionEstablished: false,
+            sessionId: null,
             sharedSecret: null,
             ephemeralKeyPublic: null,
             otkKeyId: null,
@@ -336,6 +347,20 @@ export const useSessionStore = create((set, get) => ({
                 console.log("Session started with different user, ignoring");
             }
         });
+    },
+
+    generateSessionId: () => {
+        const { selectedUser } = get();
+        const authUser = useAuthStore.getState().authUser;
+        
+        if (!selectedUser || !authUser) return null;
+        
+        const userIds = [authUser._id, selectedUser._id].sort();
+        const timestamp = Date.now();
+        
+        const sessionId = `session_${userIds.join('_')}_${timestamp}`;
+        
+        return sessionId;
     },
     
 }));

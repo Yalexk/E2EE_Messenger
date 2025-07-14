@@ -34,6 +34,10 @@ const messageSchema = new mongoose.Schema(
             type: String,
             required: function () { return this.isInitialMessage; },
         },
+        sessionId: {
+            type: String,
+            required: true,
+        },
     },
     {
         timestamps: true,

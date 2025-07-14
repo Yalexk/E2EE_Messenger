@@ -8,6 +8,7 @@ export const sendInitialMessage = async (req, res) => {
         const senderId = req.user._id;
         const senderIdentityKey = req.user.identityKey;
         const {
+            sessionId,
             encryptedMessage, 
             nonce,
             ephemeralKeyPublic,
@@ -23,6 +24,7 @@ export const sendInitialMessage = async (req, res) => {
             senderIdentityKey,
             otkKeyId,
             nonce,
+            sessionId,
         });
 
         await initialMessage.save();

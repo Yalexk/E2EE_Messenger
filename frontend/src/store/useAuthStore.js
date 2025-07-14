@@ -72,6 +72,7 @@ export const useAuthStore = create((set, get) => ({
                 edIdentityKeySecret: naclUtil.encodeBase64(edIdentityKeyPair.secretKey),
                 signedPreKeySecret: naclUtil.encodeBase64(signedPreKeyPair.secretKey),
                 oneTimePreKeysSecret: privatePreKeys,
+                sessions: [],
             };
             
             const privateKeysString = JSON.stringify(privateKeys);

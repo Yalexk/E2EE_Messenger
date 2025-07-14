@@ -182,12 +182,11 @@ export const useSessionStore = create((set, get) => ({
 
             const res = await axiosInstance.post(`/session/sendInitial/${selectedUser._id}`, payload);
 
+            // Add the session data to local storage
+            get().addSessionToLocalStorage(sessionId, sharedSecret);
+            
             console.log("Initial message sent:", res.data);
-            console.log("Session established:", get().sessionEstablished);
-
-            // after session is established add the sessionID and shared secret to local storage
-            
-            
+            console.log("Session established:", get().sessionEstablished);            
         } catch (error) {
             console.error("Error sending initial message:", error);
         }
@@ -205,8 +204,11 @@ export const useSessionStore = create((set, get) => ({
                 }
                 console.log("Initial message received:", res.data);
                 set({ sessionEstablished: true });
+                set({ sessionId: res.data.sessionId });
 
                 await get().deriveSharedSecretFromInitialMessage(res.data);
+
+                get().addSessionToLocalStorage(get().sessionId, get().sharedSecret);
             }
         } catch (error) {
             console.error("Error fetching initial message:", error);
@@ -288,6 +290,7 @@ export const useSessionStore = create((set, get) => ({
                 // Delete the used one-time prekey if it was used
                 if (usedOtkIndex !== -1) {
                     await get().deleteUsedOneTimePreKey(otkKeyId, usedOtkIndex);
+                    console.log(`Used one-time prekey with ID ${otkKeyId} deleted from state and localStorage`);
                 }
 
             } else {
@@ -324,9 +327,20 @@ export const useSessionStore = create((set, get) => ({
                 console.log(`Remaining OTKs: ${updatedOTKs.length}`);
             }
 
-            await axiosInstance.delete(`/session/otk/${otkKeyId}`);
-            console.log(`Public one-time prekey ${otkKeyId} removed from server`);
-            
+           try {
+            const response = await axiosInstance.delete(`/session/otk/${otkKeyId}`);
+            console.log(`✅ Public one-time prekey ${otkKeyId} removed from server`);
+            console.log("Server response:", response.data);
+        } catch (serverError) {
+            console.error(`❌ Failed to delete OTK ${otkKeyId} from server:`, serverError);
+            console.error("Server error details:", {
+                status: serverError.response?.status,
+                statusText: serverError.response?.statusText,
+                data: serverError.response?.data,
+                message: serverError.message
+            });
+        }
+
         } catch (error) {
             console.error("Error deleting used one-time prekey:", error);
         }
@@ -412,5 +426,39 @@ export const useSessionStore = create((set, get) => ({
         
         return sessionId;
     },
-    
+
+    addSessionToLocalStorage: (sessionId, sharedSecret) => {
+        try {
+            const authUser = useAuthStore.getState().authUser;
+            if (!authUser) {
+                console.error("No authenticated user found");
+                return;
+            }
+
+            const privateKeyData = localStorage.getItem(`privateKeys${authUser.username}`);
+            if (!privateKeyData) {
+                console.error("No private keys found in localStorage");
+                return;
+            }
+
+            const privateKeys = JSON.parse(privateKeyData);
+
+            if (!privateKeys.sessions) {
+                privateKeys.sessions = [];
+            }
+
+            const sessionData = {
+                sessionId,
+                sharedSecret,
+            };
+
+            privateKeys.sessions.push(sessionData);
+
+            // Store the session data in localStorage
+            localStorage.setItem(`privateKeys${authUser.username}`, JSON.stringify(privateKeys));
+            console.log("Session data saved to localStorage:", sessionData);
+        } catch (error) {
+            console.error("Error adding session to localStorage:", error);
+        }
+    },
 }));

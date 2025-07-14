@@ -90,8 +90,9 @@ export const getKeys = async (receiverId) => {
 
         if (receiver.oneTimePreKeys && receiver.oneTimePreKeys.length > 0) {
             oneTimePreKeys = receiver.oneTimePreKeys;
-            otkKeyId = Math.floor(Math.random() * oneTimePreKeys.length);
-            oneTimePreKey = oneTimePreKeys.find(key => key.id === otkKeyId);
+            const randomIndex = Math.floor(Math.random() * receiver.oneTimePreKeys.length);
+            oneTimePreKey = receiver.oneTimePreKeys[randomIndex];
+            otkKeyId = oneTimePreKey.id;
         }
 
         const keys = {
@@ -176,6 +177,11 @@ export const deletePublicKey = async (req, res) => {
             { _id: userId },
             { $pull: { oneTimePreKeys: { id: keyId } } }
         );
+
+        res.status(200).json({ 
+            message: "One-time prekey deleted successfully",
+            deletedKeyId: keyId 
+        });
 
     } catch (error) {
         console.error("Error deleting public key:", error.message);

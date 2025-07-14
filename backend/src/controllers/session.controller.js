@@ -92,13 +92,6 @@ export const getKeys = async (receiverId) => {
             oneTimePreKeys = receiver.oneTimePreKeys;
             otkKeyId = Math.floor(Math.random() * oneTimePreKeys.length);
             oneTimePreKey = oneTimePreKeys.find(key => key.id === otkKeyId);
-
-
-            // Dlete the OTK
-            const index = oneTimePreKeys.findIndex(key => key.id === otkKeyId);
-            oneTimePreKeys.splice(index, 1);
-            receiver.oneTimePreKeys = oneTimePreKeys;
-            await receiver.save();
         }
 
         const keys = {
@@ -155,6 +148,37 @@ export const endSession = async (req, res) => {
         res.status(200).json({ message: "Session ended successfully" });
     } catch (error) {
         console.error("Error ending session:", error.message);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+export const deletePublicKey = async (req, res) => {
+    try {
+        const { otkKeyId } = req.params;
+        const userId = req.user._id;
+
+        const user = await User.findById(userId);
+
+        if (!user) {
+            return null;
+        }
+
+        const keyId = parseInt(otkKeyId);
+
+        const otkExists = user.oneTimePreKeys.some(key => key.id === keyId);
+        if (!otkExists) {
+            console.log(`OTK ${keyId} not found for user ${userId}`);
+            return res.status(404).json({ message: "One-time prekey not found" });
+        }
+        
+        // Delete the public otk
+        await User.updateOne(
+            { _id: userId },
+            { $pull: { oneTimePreKeys: { id: keyId } } }
+        );
+
+    } catch (error) {
+        console.error("Error deleting public key:", error.message);
         res.status(500).json({ message: "Internal server error" });
     }
 };

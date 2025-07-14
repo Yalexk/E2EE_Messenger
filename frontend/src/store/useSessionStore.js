@@ -226,11 +226,24 @@ export const useSessionStore = create((set, get) => ({
 
             // Find the correct OTK by otkKeyId if present
             let OPKb = null;
+            let usedOtkIndex = -1;
+
             if (otkKeyId && otkKeyId !== "null" && otkKeyId !== "undefined") {
                 console.log("Getting the one time prekey from ", oneTimePreKeysSecret);
                 console.log("otkKeyId:", otkKeyId);
-                OPKb = naclUtil.decodeBase64(get().oneTimePreKeysSecret.find(k => k.id == otkKeyId).privateKey);
-                if (!OPKb) {
+
+                const otkEntry = oneTimePreKeysSecret.find((k, index) => {
+                    if (k.id == otkKeyId) {
+                        usedOtkIndex = index;
+                        return true;
+                    }
+                    return false;
+                });
+
+                if (otkEntry) {
+                    OPKb = naclUtil.decodeBase64(otkEntry.privateKey);
+                    
+                } else {
                     console.error("One-time prekey not found for ID:", otkKeyId);
                     return;
                 }
@@ -271,6 +284,12 @@ export const useSessionStore = create((set, get) => ({
             if (decrypted) {
                 message = naclUtil.encodeUTF8(decrypted);
                 console.log(`Decrypted message: ${message}`);
+
+                // Delete the used one-time prekey if it was used
+                if (usedOtkIndex !== -1) {
+                    await get().deleteUsedOneTimePreKey(otkKeyId, usedOtkIndex);
+                }
+
             } else {
                 message = "[Failed to decrypt]";
                 console.log("Decryption failed.");
@@ -279,6 +298,37 @@ export const useSessionStore = create((set, get) => ({
         } catch (error) {
             console.error("Error deriving shared secret from initial message:", error);
             return null;
+        }
+    },
+
+    deleteUsedOneTimePreKey: async (otkKeyId, usedIndex) => {
+        try {
+            const authUser = useAuthStore.getState().authUser;
+            const { oneTimePreKeysSecret } = get();
+            
+            // Remove the used OTK from the array
+            const updatedOTKs = oneTimePreKeysSecret.filter((_, index) => index !== usedIndex);
+            
+            // Update the state
+            set({ oneTimePreKeysSecret: updatedOTKs });
+            
+            // Update localStorage
+            const privateKeyData = localStorage.getItem(`privateKeys${authUser.username}`);
+            if (privateKeyData) {
+                const parsed = JSON.parse(privateKeyData);
+                parsed.oneTimePreKeysSecret = updatedOTKs;
+                
+                localStorage.setItem(`privateKeys${authUser.username}`, JSON.stringify(parsed));
+                
+                console.log(`One-time prekey with ID ${otkKeyId} deleted from localStorage`);
+                console.log(`Remaining OTKs: ${updatedOTKs.length}`);
+            }
+
+            await axiosInstance.delete(`/session/otk/${otkKeyId}`);
+            console.log(`Public one-time prekey ${otkKeyId} removed from server`);
+            
+        } catch (error) {
+            console.error("Error deleting used one-time prekey:", error);
         }
     },
 

@@ -31,39 +31,59 @@ export const useChatStore = create((set, get) => ({
                         
             const encryptedMessages = res.data;
             const decryptedMessages = await Promise.all(
-            encryptedMessages.map(async (message) => {
-                try {
-                    const sharedSecret = useSessionStore.getState().sharedSecret;
-                    if (sharedSecret && message.messageText && message.nonce) {
-                        const encryptedMessage = naclUtil.decodeBase64(message.messageText);
-                        const nonce = naclUtil.decodeBase64(message.nonce);
-                        const key = naclUtil.decodeBase64(sharedSecret);
-                        
-                        const decrypted = nacl.secretbox.open(encryptedMessage, nonce, key);
-                        
-                        if (decrypted) {
-                            return {
-                                ...message,
-                                messageText: naclUtil.encodeUTF8(decrypted)
-                            };
+                encryptedMessages.map(async (message) => {
+                    try {
+                        // get the shared secret for each message
+                        let sharedSecret = null;
+
+                        const currentSessionId = await useSessionStore.getState().sessionId;
+                        if (currentSessionId === message.sessionId) {
+                                sharedSecret = useSessionStore.getState().sharedSecret;
+                        } else {
+                            const authUser = useAuthStore.getState().authUser;
+                            const privateKeyData = localStorage.getItem(`privateKeys${authUser.username}`);
+                            if (privateKeyData) {
+                                const privateKeys = JSON.parse(privateKeyData);
+                                const sessionData = privateKeys.sessions.find(
+                                    session => session.sessionId === message.sessionId
+                                );
+                                if (sessionData) {
+                                    sharedSecret = sessionData.sharedSecret;
+                                }
+                            }
                         }
+                        
+                        // decrypte the message 
+                        if (sharedSecret && message.messageText && message.nonce) {
+                            const encryptedMessage = naclUtil.decodeBase64(message.messageText);
+                            const nonce = naclUtil.decodeBase64(message.nonce);
+                            const key = naclUtil.decodeBase64(sharedSecret);
+                            
+                            const decrypted = nacl.secretbox.open(encryptedMessage, nonce, key);
+                            
+                            if (decrypted) {
+                                return {
+                                    ...message,
+                                    messageText: naclUtil.encodeUTF8(decrypted)
+                                };
+                            }
+                        }
+                        return {
+                            ...message,
+                            messageText: "[Failed to decrypt]"
+                        };
+                    } catch (error) {
+                        console.error("Error decrypting message:", error);
+                        return {
+                            ...message,
+                            messageText: "[Decryption error]"
+                        };
                     }
-                    return {
-                        ...message,
-                        messageText: "[Failed to decrypt]"
-                    };
-                } catch (error) {
-                    console.error("Error decrypting message:", error);
-                    return {
-                        ...message,
-                        messageText: "[Decryption error]"
-                    };
-                }
-            })
-        );
+                })
+            );
         
-        set({ messages: decryptedMessages });
-    } catch (error) {
+            set({ messages: decryptedMessages });
+        } catch (error) {
             console.error("Error fetching messages:", error);
         } finally {
             set({ isMessagesLoading: false });

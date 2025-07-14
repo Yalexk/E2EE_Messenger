@@ -327,19 +327,12 @@ export const useSessionStore = create((set, get) => ({
                 console.log(`Remaining OTKs: ${updatedOTKs.length}`);
             }
 
-           try {
-            const response = await axiosInstance.delete(`/session/otk/${otkKeyId}`);
-            console.log(`✅ Public one-time prekey ${otkKeyId} removed from server`);
-            console.log("Server response:", response.data);
-        } catch (serverError) {
-            console.error(`❌ Failed to delete OTK ${otkKeyId} from server:`, serverError);
-            console.error("Server error details:", {
-                status: serverError.response?.status,
-                statusText: serverError.response?.statusText,
-                data: serverError.response?.data,
-                message: serverError.message
-            });
-        }
+            try {
+                await axiosInstance.delete(`/session/otk/${otkKeyId}`);
+                console.log(`Public one-time prekey ${otkKeyId} removed from server`);
+            } catch (serverError) {
+                console.error(`Failed to delete OTK ${otkKeyId} from server:`, serverError);
+            }
 
         } catch (error) {
             console.error("Error deleting used one-time prekey:", error);
@@ -379,9 +372,6 @@ export const useSessionStore = create((set, get) => ({
             otkKeyId: null,
             recipientKeyBundle: null
         });
-        
-        // Stop listening to messages for this session
-        useChatStore.getState().deafenMessages();
         
         console.log("Session reset");
     },

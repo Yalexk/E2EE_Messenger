@@ -4,10 +4,10 @@ import { useSessionStore } from "../store/useSessionStore";
 
 const ChatHeader = () => {
     const { selectedUser } = useChatStore();
-    const { endSession } = useSessionStore();
+    const { resetSession } = useSessionStore();
 
     const handleClose = async () => {
-        await endSession();
+        await resetSession();
         useChatStore.setState({ selectedUser: null });
         useSessionStore.setState({ selectedUser: null });
     };

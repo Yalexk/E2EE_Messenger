@@ -38,6 +38,12 @@ const messageSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
+        sessionState: {
+            senderEnded: { type: Boolean, default: false },
+            receiverStarted: { type: Boolean, default: false },
+            receiverEnded: { type: Boolean, default: false },
+            bothEnded: { type: Boolean, default: false }
+        }
     },
     {
         timestamps: true,

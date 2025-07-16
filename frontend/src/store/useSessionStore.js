@@ -24,7 +24,7 @@ export const useSessionStore = create((set, get) => ({
         if (get().selectedUser != user) {
             // End the previous session if it exists
             if (get().selectedUser && get().sessionEstablished) {
-                await get().endSession();
+                await get().resetSession();
             }
 
             set({ selectedUser: user });
@@ -57,14 +57,14 @@ export const useSessionStore = create((set, get) => ({
                 edIdentityKey
             );
 
-            console.log("Signature valid:", isValid);
+            // console.log("Signature valid:", isValid);
 
         if (!isValid) {
             console.error("Invalid signedPreKey: Signature verification failed.");
             return null; 
         }
 
-        console.log("Keys fetched:", keys);
+        // console.log("Keys fetched:", keys);
 
 
         set({ recipientKeyBundle: keys });
@@ -79,7 +79,7 @@ export const useSessionStore = create((set, get) => ({
     loadKeysFromStorage: () => {
         const { identityKeySecret, oneTimePreKeysSecret } = get();
         if (identityKeySecret && oneTimePreKeysSecret) {
-            console.log("Private identity keys already loaded from state.");
+            // console.log("Private identity keys already loaded from state.");
             return;
         }
 
@@ -94,7 +94,7 @@ export const useSessionStore = create((set, get) => ({
                 oneTimePreKeysSecret: parsed.oneTimePreKeysSecret,
                 signedPreKeySecret: parsed.signedPreKeySecret,
             });
-            console.log(" Private identity keys loaded from localStorage:", parsed.identityKeySecret, parsed.oneTimePreKeysSecret, parsed.signedPreKeySecret);
+            // console.log(" Private identity keys loaded from localStorage:", parsed.identityKeySecret, parsed.oneTimePreKeysSecret, parsed.signedPreKeySecret);
         } catch (error) {
             console.error("Failed to load identity keys from localStorage:", error);
         }
@@ -144,7 +144,7 @@ export const useSessionStore = create((set, get) => ({
             const sk = await crypto.subtle.digest('SHA-256', concatSecrets);            
             const sharedSecretBase64 = naclUtil.encodeBase64(new Uint8Array(sk));
             set({ sharedSecret: sharedSecretBase64 })
-            console.log("Shared secret created:", sharedSecretBase64);
+            // console.log("Shared secret created:", sharedSecretBase64);
             return sharedSecretBase64;
         } catch (error) {
             console.error("Error creating shared secret:", error);
@@ -216,6 +216,7 @@ export const useSessionStore = create((set, get) => ({
     },
 
     deriveSharedSecretFromInitialMessage: async (initialMessage) => {
+        // need to add logic if the sender is receiving the initial message eg. if they log out and back in
         try {
             await get().loadKeysFromStorage();
             const { identityKeySecret, oneTimePreKeysSecret, signedPreKeySecret } = get();
@@ -231,8 +232,8 @@ export const useSessionStore = create((set, get) => ({
             let usedOtkIndex = -1;
 
             if (otkKeyId && otkKeyId !== "null" && otkKeyId !== "undefined") {
-                console.log("Getting the one time prekey from ", oneTimePreKeysSecret);
-                console.log("otkKeyId:", otkKeyId);
+                // console.log("Getting the one time prekey from ", oneTimePreKeysSecret);
+                // console.log("otkKeyId:", otkKeyId);
 
                 const otkEntry = oneTimePreKeysSecret.find((k, index) => {
                     if (k.id == otkKeyId) {
@@ -273,10 +274,10 @@ export const useSessionStore = create((set, get) => ({
             const sk = await crypto.subtle.digest('SHA-256', concatSecrets);            
             const sharedSecret = naclUtil.encodeBase64(new Uint8Array(sk));
             set({ sharedSecret });
-            console.log("Receiver's shared secret created from the sender:", sharedSecret);
+            // console.log("Receiver's shared secret created from the sender:", sharedSecret);
 
             // 3. Decrypt the message
-            console.log("Encrypted message base64:", messageText);
+            // console.log("Encrypted message base64:", messageText);
             const nonceUint8 = naclUtil.decodeBase64(nonce);
             const encryptedUint8 = naclUtil.decodeBase64(messageText);
             const keyUint8 = naclUtil.decodeBase64(sharedSecret);
@@ -285,7 +286,7 @@ export const useSessionStore = create((set, get) => ({
             let message;
             if (decrypted) {
                 message = naclUtil.encodeUTF8(decrypted);
-                console.log(`Decrypted message: ${message}`);
+                // console.log(`Decrypted message: ${message}`);
 
                 // Delete the used one-time prekey if it was used
                 if (usedOtkIndex !== -1) {
@@ -339,13 +340,14 @@ export const useSessionStore = create((set, get) => ({
         }
     },
 
+    // this function should set the session state in the database of the current user to ended
     endSession: async () => {
         try {
             const { selectedUser } = get();
             if (!selectedUser) return;
 
             // Notify the other user that the session is ending
-            await axiosInstance.post(`/session/endSession/${selectedUser._id}`);
+            // await axiosInstance.post(`/session/endSession/${selectedUser._id}`);
             
             // Reset local session state
             set({
@@ -446,7 +448,7 @@ export const useSessionStore = create((set, get) => ({
 
             // Store the session data in localStorage
             localStorage.setItem(`privateKeys${authUser.username}`, JSON.stringify(privateKeys));
-            console.log("Session data saved to localStorage:", sessionData);
+            // console.log("Session data saved to localStorage:", sessionData);
         } catch (error) {
             console.error("Error adding session to localStorage:", error);
         }

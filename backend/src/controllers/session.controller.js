@@ -49,13 +49,16 @@ export const sendInitialMessage = async (req, res) => {
 
 export const getInitialMessage = async (req, res) => {
     try {
-        const receiverId = req.user._id;
-        const senderId = req.params.id;
+        // find a message where both ids match
+        const me = req.user._id;
+        const them = req.params.id;
 
         const initialMessage = await Message.findOne({
-            senderId,
-            receiverId,
-            isInitialMessage: true
+            isInitialMessage: true,
+            $or: [
+                { senderId: them,  receiverId: me   },
+                { senderId: me,    receiverId: them }
+            ]
         }).sort({ createdAt: -1 });
 
         if (!initialMessage) {
@@ -65,7 +68,7 @@ export const getInitialMessage = async (req, res) => {
         console.log("Initial message received:", initialMessage);
 
         // delete the initial message from the database after fetching it
-        await Message.deleteOne({ _id: initialMessage._id });
+        //await Message.deleteOne({ _id: initialMessage._id });
         
         res.status(200).json(initialMessage);
 
@@ -137,6 +140,8 @@ export const endSession = async (req, res) => {
         const { id: receiverId } = req.params;
         const senderId = req.user._id;
 
+        // Here we dont need to end the session of the other user
+        /*
         // Emit socket event to the other user
         const receiverSocketId = getReceiverSocketId(receiverId);
         if (receiverSocketId) {
@@ -145,6 +150,7 @@ export const endSession = async (req, res) => {
                 message: "Session has been ended"
             });
         }
+        */
 
         res.status(200).json({ message: "Session ended successfully" });
     } catch (error) {

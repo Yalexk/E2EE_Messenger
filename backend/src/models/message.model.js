@@ -47,7 +47,7 @@ const messageSchema = new mongoose.Schema(
                 type: Boolean,
                 default: false,
             },
-            receiverHasLeft: {
+            receiverSessionActive: {
                 type: Boolean,
                 default: false,
             },

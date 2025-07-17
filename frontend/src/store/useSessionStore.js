@@ -31,8 +31,6 @@ export const useSessionStore = create((set, get) => ({
             set({ selectedUser: user });
             useChatStore.setState({ selectedUser: user });
 
-            // get().listenToSessionEvents();
-
             await get().fetchInitialMessage();
             
             if (!get().sessionEstablished) {
@@ -397,33 +395,6 @@ export const useSessionStore = create((set, get) => ({
         });
         
         console.log("Session reset");
-    },
-
-    listenToSessionEvents: () => {
-        const socket = useAuthStore.getState().socket;
-        
-        socket.off("sessionEnded");
-        socket.off("sessionStarted");
-        
-        socket.on("sessionEnded", (data) => {
-            console.log("Session ended by other user:", data);
-            get().resetSession();
-        });
-
-        socket.on("sessionStarted", async (data) => {
-            console.log("Session started by other user:", data);
-            
-            // Only respond if we're currently chatting with this user
-            const { selectedUser } = get();
-            if (selectedUser && selectedUser._id === data.startedBy) {
-                console.log("Fetching initial message for current chat");
-                
-                // Fetch the initial message using existing HTTP route
-                await get().fetchInitialMessage();
-            } else {
-                console.log("Session started with different user, ignoring");
-            }
-        });
     },
 
     generateSessionId: () => {

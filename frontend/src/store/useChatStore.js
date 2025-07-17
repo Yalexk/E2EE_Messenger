@@ -60,7 +60,7 @@ export const useChatStore = create((set, get) => ({
                             }
                         }
                         
-                        // decrypte the message 
+                        // decrypt the message 
                         if (sharedSecret && message.messageText && message.nonce) {
                             const encryptedMessage = naclUtil.decodeBase64(message.messageText);
                             const nonce = naclUtil.decodeBase64(message.nonce);

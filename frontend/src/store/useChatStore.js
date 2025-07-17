@@ -37,8 +37,7 @@ export const useChatStore = create((set, get) => ({
                         // Skip decryption for initial messages
                         if (message.isInitialMessage) {
                             return {
-                                ...message,
-                                messageText: message.messageText || "[Initial message]"
+                                ...message
                             };
                         }
                         // get the shared secret for each message

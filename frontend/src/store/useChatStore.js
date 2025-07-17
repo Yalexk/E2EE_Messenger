@@ -33,6 +33,14 @@ export const useChatStore = create((set, get) => ({
             const decryptedMessages = await Promise.all(
                 encryptedMessages.map(async (message) => {
                     try {
+
+                        // Skip decryption for initial messages
+                        if (message.isInitialMessage) {
+                            return {
+                                ...message,
+                                messageText: message.messageText || "[Initial message]"
+                            };
+                        }
                         // get the shared secret for each message
                         let sharedSecret = null;
 

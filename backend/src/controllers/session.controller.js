@@ -194,3 +194,27 @@ export const deletePublicKey = async (req, res) => {
         res.status(500).json({ message: "Internal server error" });
     }
 };
+
+export const updateReceiverSessionInfo = async (req, res) => {
+    try {
+        const { id: receiverId } = req.params;
+        const senderId = req.user._id;
+
+        // Update session info for the receiver
+        const updatedMessage = await Message.findOneAndUpdate(
+            { senderId, receiverId, isInitialMessage: true },
+            { $set: { "sessionInfo.receiverHasReceived": true } },
+            { new: true }
+        );
+
+        if (!updatedMessage) {
+            return res.status(404).json({ message: "Initial message not found" });
+        }
+
+        console.log("Receiver session info updated:", updatedMessage);
+        res.status(200).json(updatedMessage);
+    } catch (error) {
+        console.error("Error updating receiver session info:", error.message);
+        res.status(500).json({ message: "Internal server error" });
+    }
+};

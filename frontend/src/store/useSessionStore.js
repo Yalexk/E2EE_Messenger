@@ -4,6 +4,7 @@ import { useAuthStore } from './useAuthStore.js';
 import { useChatStore } from './useChatStore.js';
 import nacl from 'tweetnacl';
 import naclUtil from 'tweetnacl-util';
+import axios from 'axios';
 
 export const useSessionStore = create((set, get) => ({
     selectedUser: null,
@@ -203,12 +204,30 @@ export const useSessionStore = create((set, get) => ({
                     return;
                 }
                 console.log("Initial message received:", res.data);
-                set({ sessionEstablished: true });
-                set({ sessionId: res.data.sessionId });
+                const sessionId = res.data.sessionId;
+                set({ sessionId, sessionEstablished: true });
 
-                await get().deriveSharedSecretFromInitialMessage(res.data);
-
-                get().addSessionToLocalStorage(get().sessionId, get().sharedSecret);
+                // check to see if the shared secret is alrady in local storage
+                const authUser = useAuthStore.getState().authUser;
+                let existingSession = null;
+                const privateKeyData = localStorage.getItem(`privateKeys${authUser.username}`);
+                if (privateKeyData) {
+                    const privateKeys = JSON.parse(privateKeyData);
+                    if (Array.isArray(privateKeys.sessions)) {
+                        existingSession = privateKeys.sessions.find(s => s.sessionId === sessionId);
+                    }
+                }
+                
+                if (existingSession) {
+                    console.log("Found existing session in localStorage:", existingSession);
+                    set({ sharedSecret: existingSession.sharedSecret });
+                } else {
+                    await get().deriveSharedSecretFromInitialMessage(res.data);
+                    get().addSessionToLocalStorage(get().sessionId, get().sharedSecret);
+                    // update user info
+                    await axiosInstance.put(`/users/updateSessionInfo/${selectedUser._id}`, { senderId: res.data.senderId });
+                }
+                
             }
         } catch (error) {
             console.error("Error fetching initial message:", error);
@@ -288,10 +307,10 @@ export const useSessionStore = create((set, get) => ({
                 message = naclUtil.encodeUTF8(decrypted);
                 // console.log(`Decrypted message: ${message}`);
 
-                // Delete the used one-time prekey if it was used
+                // TODO Delete the used one-time prekey if it was used
                 if (usedOtkIndex !== -1) {
                     await get().deleteUsedOneTimePreKey(otkKeyId, usedOtkIndex);
-                    console.log(`Used one-time prekey with ID ${otkKeyId} deleted from state and localStorage`);
+                    // console.log(`Used one-time prekey with ID ${otkKeyId} deleted from state and localStorage`);
                 }
 
             } else {
@@ -324,13 +343,13 @@ export const useSessionStore = create((set, get) => ({
                 
                 localStorage.setItem(`privateKeys${authUser.username}`, JSON.stringify(parsed));
                 
-                console.log(`One-time prekey with ID ${otkKeyId} deleted from localStorage`);
-                console.log(`Remaining OTKs: ${updatedOTKs.length}`);
+                // console.log(`One-time prekey with ID ${otkKeyId} deleted from localStorage`);
+                // console.log(`Remaining OTKs: ${updatedOTKs.length}`);
             }
 
             try {
                 await axiosInstance.delete(`/session/otk/${otkKeyId}`);
-                console.log(`Public one-time prekey ${otkKeyId} removed from server`);
+                // console.log(`Public one-time prekey ${otkKeyId} removed from server`);
             } catch (serverError) {
                 console.error(`Failed to delete OTK ${otkKeyId} from server:`, serverError);
             }

@@ -137,22 +137,42 @@ export const getKeysRoute = async (req, res) => {
 
 export const endSession = async (req, res) => {
     try {
-        const { id: receiverId } = req.params;
-        const senderId = req.user._id;
+        const { id: selectedUser } = req.params;
+        const currentUser = req.user._id;
 
-        // Here we dont need to end the session of the other user
-        /*
-        // Emit socket event to the other user
-        const receiverSocketId = getReceiverSocketId(receiverId);
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit("sessionEnded", {
-                endedBy: senderId,
-                message: "Session has been ended"
-            });
+        // Find the initial message to determine the session
+        const initialMessage = await Message.findOne({
+            isInitialMessage: true,
+            $or: [
+                { senderId: selectedUser, receiverId: currentUser },
+                { senderId: currentUser, receiverId: selectedUser }
+            ]
+        });
+
+        if (!initialMessage) {
+            return res.status(404).json({ message: "Session not found" });
         }
-        */
 
-        res.status(200).json({ message: "Session ended successfully" });
+        // Determine which user is ending the session
+        const isSender = initialMessage.senderId.equals(currentUser);
+        const fieldToUpdate = isSender
+        ? "sessionInfo.senderSessionActive"
+        : "sessionInfo.receiverSessionActive";
+
+        // Update only that flag
+        const updated = await Message.findByIdAndUpdate(
+        initialMessage._id,
+        { $set: { [fieldToUpdate]: false } },
+        { new: true }
+        );
+
+        // Delete the session if the other field is also false
+        if (!updated.sessionInfo.senderSessionActive && !updated.sessionInfo.receiverSessionActive) {
+            await Message.deleteOne({ _id: updated._id });
+            res.status(200).json({ message: "Session ended and deleted successfully" });
+        }
+
+        res.status(200).json({ message: "Session ended successfully for user " + currentUser.username });
     } catch (error) {
         console.error("Error ending session:", error.message);
         res.status(500).json({ message: "Internal server error" });
@@ -195,23 +215,40 @@ export const deletePublicKey = async (req, res) => {
     }
 };
 
-export const updateReceiverSessionInfo = async (req, res) => {
+export const updateSessionInfo = async (req, res) => {
     try {
-        const { id: receiverId } = req.params;
-        const senderId = req.user._id;
+        const { id: selectedUser } = req.params;
+        const currentUser = req.user._id;
 
-        // Update session info for the receiver
-        const updatedMessage = await Message.findOneAndUpdate(
-            { senderId, receiverId, isInitialMessage: true },
-            { $set: { "sessionInfo.receiverHasReceived": true } },
+         // Find the initial message to determine the session
+        const initialMessage = await Message.findOne({
+            isInitialMessage: true,
+            $or: [
+                { senderId: selectedUser, receiverId: currentUser },
+                { senderId: currentUser, receiverId: selectedUser }
+            ]
+        });
+
+        if (!initialMessage) {
+            return res.status(404).json({ message: "Session not found" });
+        }
+
+        // Determine which user is received the message
+        const isSender = initialMessage.senderId.equals(currentUser);
+        const updates = isSender
+            ? { "sessionInfo.senderSessionActive": true }
+            : {
+                "sessionInfo.receiverHasReceived": true,
+                "sessionInfo.receiverSessionActive": true
+              };
+  
+        const updatedMessage = await Message.findByIdAndUpdate(
+            initialMessage._id,
+            { $set: updates },
             { new: true }
         );
 
-        if (!updatedMessage) {
-            return res.status(404).json({ message: "Initial message not found" });
-        }
-
-        console.log("Receiver session info updated:", updatedMessage);
+        console.log("Session info updated:", updatedMessage);
         res.status(200).json(updatedMessage);
     } catch (error) {
         console.error("Error updating receiver session info:", error.message);

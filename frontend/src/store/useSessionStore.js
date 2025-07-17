@@ -25,13 +25,13 @@ export const useSessionStore = create((set, get) => ({
         if (get().selectedUser != user) {
             // End the previous session if it exists
             if (get().selectedUser && get().sessionEstablished) {
-                await get().resetSession();
+                await get().endSession();
             }
 
             set({ selectedUser: user });
             useChatStore.setState({ selectedUser: user });
 
-            get().listenToSessionEvents();
+            // get().listenToSessionEvents();
 
             await get().fetchInitialMessage();
             
@@ -224,9 +224,11 @@ export const useSessionStore = create((set, get) => ({
                 } else {
                     await get().deriveSharedSecretFromInitialMessage(res.data);
                     get().addSessionToLocalStorage(get().sessionId, get().sharedSecret);
-                    // update user info
-                    await axiosInstance.put(`/users/updateSessionInfo/${selectedUser._id}`, { senderId: res.data.senderId });
                 }
+
+                // update the session info in the database
+                await axiosInstance.put(`/session/updateSessionInfo/${selectedUser._id}`, { senderId: res.data.senderId });
+                console.log("Session info updated in the database.");
                 
             }
         } catch (error) {
@@ -365,8 +367,8 @@ export const useSessionStore = create((set, get) => ({
             const { selectedUser } = get();
             if (!selectedUser) return;
 
-            // Notify the other user that the session is ending
-            // await axiosInstance.post(`/session/endSession/${selectedUser._id}`);
+            // set the sessionactive to false
+            await axiosInstance.post(`/session/endSession/${selectedUser._id}`);
             
             // Reset local session state
             set({

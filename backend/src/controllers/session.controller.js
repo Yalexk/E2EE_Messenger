@@ -190,23 +190,21 @@ export const deletePublicKey = async (req, res) => {
             return null;
         }
 
-        const keyId = parseInt(otkKeyId);
-
-        const otkExists = user.oneTimePreKeys.some(key => key.id === keyId);
+        const otkExists = user.oneTimePreKeys.some(key => key.id === otkKeyId);
         if (!otkExists) {
-            console.log(`OTK ${keyId} not found for user ${userId}`);
+            console.log(`OTK ${otkKeyId} not found for user ${userId}`);
             return res.status(404).json({ message: "One-time prekey not found" });
         }
         
         // Delete the public otk
         await User.updateOne(
             { _id: userId },
-            { $pull: { oneTimePreKeys: { id: keyId } } }
+            { $pull: { oneTimePreKeys: { id: otkKeyId } } }
         );
 
         res.status(200).json({ 
             message: "One-time prekey deleted successfully",
-            deletedKeyId: keyId 
+            deletedKeyId: otkKeyId 
         });
 
     } catch (error) {

@@ -136,7 +136,11 @@ export const useChatStore = create((set, get) => ({
         
         socket.off("newMessage");
 
-        socket.on("newMessage", (newMessage) => {            
+        socket.on("newMessage", (newMessage) => {  
+            if (newMessage.isInitialMessage) {
+                return;
+            }          
+            
             const isPartOfConversation = 
             (newMessage.senderId === selectedUser._id && newMessage.receiverId === authUser._id) || 
             (newMessage.senderId === authUser._id && newMessage.receiverId === selectedUser._id);

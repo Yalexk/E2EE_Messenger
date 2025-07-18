@@ -29,13 +29,14 @@ export const useChatStore = create((set, get) => ({
         try {
             const res = await axiosInstance.get(`/messages/${userId}`);
                         
-            const encryptedMessages = res.data;
+            const encryptedMessages = res.data.filter(m => !m.isInitialMessage);
             const decryptedMessages = await Promise.all(
                 encryptedMessages.map(async (message) => {
                     try {
 
                         // Skip decryption for initial messages
                         if (message.isInitialMessage) {
+                            console.log("Skipping initial message decryption:", message);
                             return {
                                 ...message
                             };

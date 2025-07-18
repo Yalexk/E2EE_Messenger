@@ -336,13 +336,13 @@ export const useSessionStore = create((set, get) => ({
                 
                 localStorage.setItem(`privateKeys${authUser.username}`, JSON.stringify(parsed));
                 
-                console.log(`One-time prekey with ID ${otkKeyId} deleted from localStorage`);
+                //console.log(`One-time prekey with ID ${otkKeyId} deleted from localStorage`);
                 // console.log(`Remaining OTKs: ${updatedOTKs.length}`);
             }
 
             try {
                 await axiosInstance.delete(`/session/otk/${otkKeyId}`);
-                console.log(`Public one-time prekey ${otkKeyId} removed from server`);
+                // console.log(`Public one-time prekey ${otkKeyId} removed from server`);
             } catch (serverError) {
                 console.error(`Failed to delete OTK ${otkKeyId} from server:`, serverError);
             }

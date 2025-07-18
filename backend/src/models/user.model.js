@@ -35,7 +35,7 @@ const userSchema = new mongoose.Schema(
         oneTimePreKeys: {
             type: [
                 {
-                    id: { type: Number, required: true },
+                    id: { type: String, required: true },
                     publicKey: { type: String, required: true }
                 }
             ],

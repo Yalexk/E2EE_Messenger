@@ -81,12 +81,18 @@ export const login = async (req, res) => {
         // generate jwt token
         generateToken(user._id, res);
 
+        // check number of one time prekeys, if less than 10, generate more
+        const generateOtks = user.oneTimePreKeys.length < 10;
+
+        // change the signed prekey once a week
+
         res.status(200).json({
             message: "Login successful",
             user: {
                 _id: user._id,
                 username: user.username,
             },
+            generateOtks: generateOtks,
         });
     } catch (error) {
         console.log("Error during login:", error.message);
@@ -112,3 +118,19 @@ export const checkAuth = (req, res) => {
         return res.status(500).json({ message: "Internal server error" });
     }
 };
+
+export const addOneTimePreKeys = async (req, res) => {
+    const { username, oneTimePreKeys } = req.body;
+
+    try {
+        const user = await User.findOne({ username });
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        } 
+        user.oneTimePreKeys.push(...oneTimePreKeys);
+        await user.save();
+    } catch (error) {
+        console.error("Error adding one-time prekeys:", error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+}

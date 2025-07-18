@@ -1,11 +1,13 @@
-import {create} from 'zustand';
+import { create } from 'zustand';
 import { axiosInstance } from '../lib/axios.js';
 import { io } from 'socket.io-client';
 import nacl from 'tweetnacl';
 import naclUtil from 'tweetnacl-util';
 import ed2curve from 'ed2curve';
+import { nanoid } from 'nanoid';
 
 const BASE_URL = 'http://localhost:5001';
+
 export const useAuthStore = create((set, get) => ({
     authUser: null,
     isSigningUp: false,
@@ -43,10 +45,10 @@ export const useAuthStore = create((set, get) => ({
             );
 
             const oneTimePreKeys = [];
-            for (let i = 0; i < 10; i++) {
+            for (let i = 0; i < 100; i++) {
                 const { publicKey, secretKey } = nacl.box.keyPair();
                 oneTimePreKeys.push({
-                    id: i,
+                    id: nanoid(),
                     publicKey: naclUtil.encodeBase64(publicKey),
                     privateKey: naclUtil.encodeBase64(secretKey),
                 });
@@ -108,6 +110,57 @@ export const useAuthStore = create((set, get) => ({
             set({ authUser: res.data.user });
             console.log("Logged in user:", res.data.user);
             window.alert("Logged in successfully.");
+
+            // generete new otks if < 10 in db
+            if(res.data.generateOtks) {
+                console.log("Generating new one-time prekeys...");
+                // Load the private keys from local storage
+                const privateKeysString = localStorage.getItem(`privateKeys${data.username}`);
+                if (!privateKeysString) {
+                    console.error("Private keys not found in local storage");
+                    return;
+                }
+
+                const privateKeys = JSON.parse(privateKeysString);
+
+                const oneTimePreKeys = [];
+                for (let i = 0; i < 100; i++) {
+                    const { publicKey, secretKey } = nacl.box.keyPair();
+                    oneTimePreKeys.push({
+                        id: nanoid(),
+                        publicKey: naclUtil.encodeBase64(publicKey),
+                        privateKey: naclUtil.encodeBase64(secretKey),
+                    });
+                }
+
+                const publicPrekeys = oneTimePreKeys.map(k => ({
+                    id: k.id,
+                    publicKey: k.publicKey
+                }));
+
+                const privatePreKeys = oneTimePreKeys.map(k => ({
+                    id: k.id,
+                    privateKey: k.privateKey
+                }));
+
+                const newPrivateKeys = {
+                    identityKeySecret: privateKeys.identityKeySecret,
+                    edIdentityKeySecret: privateKeys.edIdentityKeySecret,
+                    signedPreKeySecret: privateKeys.signedPreKeySecret,
+                    oneTimePreKeysSecret: [...privateKeys.oneTimePreKeysSecret, ...privatePreKeys],
+                    sessions: privateKeys.sessions,
+                };
+            
+                const newPrivateKeysString = JSON.stringify(newPrivateKeys);
+                localStorage.setItem(`privateKeys${data.username}`, newPrivateKeysString); 
+
+                // send the public otks to the server
+                await axiosInstance.post("/auth/otks", {
+                    username: res.data.user.username,
+                    oneTimePreKeys: publicPrekeys,
+                });
+
+            }
 
             get().connectSocket();
         } catch (error) {

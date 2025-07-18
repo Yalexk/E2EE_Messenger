@@ -65,7 +65,7 @@ export const getInitialMessage = async (req, res) => {
             return res.status(200).json({ message: "Initial message not found" });
         }
 
-        console.log("Initial message received:", initialMessage);
+        // console.log("Initial message received:", initialMessage);
 
         // delete the initial message from the database after fetching it
         //await Message.deleteOne({ _id: initialMessage._id });
@@ -126,7 +126,7 @@ export const getKeysRoute = async (req, res) => {
             return res.status(404).json({ message: "Receiver not found or no keys available" });
         }
 
-        console.log("Keys fetched:", keys);
+        // console.log("Keys fetched:", keys);
         
         res.status(200).json(keys);
     } catch (error) {
@@ -248,7 +248,7 @@ export const updateSessionInfo = async (req, res) => {
             { new: true }
         );
 
-        console.log("Session info updated:", updatedMessage);
+        // console.log("Session info updated:", updatedMessage);
         res.status(200).json(updatedMessage);
     } catch (error) {
         console.error("Error updating receiver session info:", error.message);

@@ -114,14 +114,7 @@ export const useAuthStore = create((set, get) => ({
             // generete new otks if < 10 in db
             if(res.data.generateOtks) {
                 console.log("Generating new one-time prekeys...");
-                // Load the private keys from local storage
-                const privateKeysString = localStorage.getItem(`privateKeys${data.username}`);
-                if (!privateKeysString) {
-                    console.error("Private keys not found in local storage");
-                    return;
-                }
-
-                const privateKeys = JSON.parse(privateKeysString);
+                const privateKeys = await get().loadPrivateKeys(data.username);
 
                 const oneTimePreKeys = [];
                 for (let i = 0; i < 100; i++) {
@@ -159,7 +152,36 @@ export const useAuthStore = create((set, get) => ({
                     username: res.data.user.username,
                     oneTimePreKeys: publicPrekeys,
                 });
+            }
 
+            if (res.data.generateNewPrekeys) {
+                console.log("Generating new signed prekey...");
+                const privateKeys = await get().loadPrivateKeys(data.username);
+
+                const signedPreKeyPair = nacl.box.keyPair();
+                const signedPreKeySignature = nacl.sign.detached(
+                    signedPreKeyPair.publicKey,
+                    naclUtil.decodeBase64(privateKeys.edIdentityKeySecret)
+                );
+
+                // update the local storage with the new signed prekey
+                const newPrivateKeys = {
+                    identityKeySecret: privateKeys.identityKeySecret,
+                    edIdentityKeySecret: privateKeys.edIdentityKeySecret,
+                    signedPreKeySecret: naclUtil.encodeBase64(signedPreKeyPair.secretKey),
+                    oneTimePreKeysSecret: privateKeys.oneTimePreKeysSecret,
+                    sessions: privateKeys.sessions,
+                };
+
+                const newPrivateKeysString = JSON.stringify(newPrivateKeys);
+                localStorage.setItem(`privateKeys${data.username}`, newPrivateKeysString);
+
+                // update the signed prekey and signature in the database
+                await axiosInstance.put("/auth/signedPreKey", {
+                    username: res.data.user.username,
+                    signedPreKey: naclUtil.encodeBase64(signedPreKeyPair.publicKey),
+                    signedPreKeySignature: naclUtil.encodeBase64(signedPreKeySignature),
+                });
             }
 
             get().connectSocket();
@@ -168,6 +190,15 @@ export const useAuthStore = create((set, get) => ({
         } finally {
             set({ isLoggingIn: false });
         }
+    },
+
+    loadPrivateKeys: async (username) => {
+        const privateKeysString = localStorage.getItem(`privateKeys${username}`);
+        if (!privateKeysString) {
+            console.error("Private keys not found in local storage");
+            return null;
+        }
+        return JSON.parse(privateKeysString);
     },
 
     logout: async () => {

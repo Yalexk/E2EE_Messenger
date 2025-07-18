@@ -84,7 +84,9 @@ export const login = async (req, res) => {
         // check number of one time prekeys, if less than 10, generate more
         const generateOtks = user.oneTimePreKeys.length < 10;
 
-        // change the signed prekey once a week
+        // check if its been 3 days since the last prekey update
+        const lastUpdated = new Date(user.lastUpdated);
+        const daysSinceLastUpdate = (Date.now() - lastUpdated.getTime()) / (1000 * 60 * 60 * 24); // in days
 
         res.status(200).json({
             message: "Login successful",
@@ -93,6 +95,7 @@ export const login = async (req, res) => {
                 username: user.username,
             },
             generateOtks: generateOtks,
+            generateNewPrekeys: daysSinceLastUpdate > 3
         });
     } catch (error) {
         console.log("Error during login:", error.message);
@@ -129,6 +132,27 @@ export const addOneTimePreKeys = async (req, res) => {
         } 
         user.oneTimePreKeys.push(...oneTimePreKeys);
         await user.save();
+    } catch (error) {
+        console.error("Error adding one-time prekeys:", error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+export const replaceSignedPrekey = async (req, res) => {
+    const { username, signedPreKey, signedPreKeySignature } = req.body;
+
+    try {
+        const user = await User.findOne({ username });
+        if (!user) {
+            return res.status(404).json({ message: "User not found" });
+        } 
+
+        user.signedPreKey = signedPreKey;
+        user.signedPreKeySignature = signedPreKeySignature;
+        user.lastUpdatedPrekey = new Date();
+        await user.save();
+
+        res.status(200).json({ message: "Signed prekey updated successfully" });
     } catch (error) {
         console.error("Error adding one-time prekeys:", error);
         return res.status(500).json({ message: "Internal server error" });

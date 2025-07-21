@@ -42,7 +42,7 @@ const userSchema = new mongoose.Schema(
             default: []
         },
         lastUpdated: {
-            type: Date,
+            type: Date, default: Date.now,
             required: true
         }
     },

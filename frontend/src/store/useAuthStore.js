@@ -5,11 +5,13 @@ import nacl from 'tweetnacl';
 import naclUtil from 'tweetnacl-util';
 import ed2curve from 'ed2curve';
 import { nanoid } from 'nanoid';
+import { encryptWithPassword, decryptWithPassword } from '../lib/crypto.js';
 
 const BASE_URL = 'http://localhost:5001';
 
 export const useAuthStore = create((set, get) => ({
     authUser: null,
+    loginPassword: null,
     isSigningUp: false,
     isLoggingIn: false,
     isCheckingAuth: true,
@@ -80,9 +82,6 @@ export const useAuthStore = create((set, get) => ({
             const privateKeysString = JSON.stringify(privateKeys);
             localStorage.setItem(`privateKeys${data.username}`, privateKeysString); 
 
-            // TODO Encrypt the private key with the password and store it in local storage
-
-
             const res = await axiosInstance.post("/auth/signup", {
                 ...data,
                 identityKey,
@@ -92,10 +91,9 @@ export const useAuthStore = create((set, get) => ({
                 oneTimePreKeys: publicPrekeys,
             });
 
-            set({ authUser: res.data.user })
+            set({ authUser: res.data.user, loginPassword: data.password });
             console.log("Signed up user:", res.data);
             get().connectSocket();
-            window.alert("Signed up successfully.");
         } catch (error) {
             console.error("Error signing up:", error);
         } finally {
@@ -107,9 +105,16 @@ export const useAuthStore = create((set, get) => ({
         set({ isLoggingIn: true });
         try {
             const res = await axiosInstance.post("/auth/login", data);
-            set({ authUser: res.data.user });
+            set({ authUser: res.data.user, loginPassword: data.password });
             console.log("Logged in user:", res.data.user);
-            window.alert("Logged in successfully.");
+
+            // decrypt the private keys from local storage
+            const privateKeysEncrypted = localStorage.getItem(`privateKeys${data.username}`);
+            const blob = JSON.parse(privateKeysEncrypted);
+            const privateKeys = await decryptWithPassword(blob, data.password);
+            const privateKeysString = JSON.stringify(privateKeys);
+            console.log("Decrypted private keys:", privateKeysString);
+            localStorage.setItem(`privateKeys${data.username}`, privateKeysString); 
 
             // generete new otks if < 10 in db
             if(res.data.generateOtks) {
@@ -203,10 +208,19 @@ export const useAuthStore = create((set, get) => ({
 
     logout: async () => {
         try {
+            const username = get().authUser.username;
+            // encrypt the private keys in local storage
+            const privateKeysString = localStorage.getItem(`privateKeys${username}`);
+            const privateKeys = JSON.parse(privateKeysString);
+            const blob = await encryptWithPassword(privateKeys, get().loginPassword);
+            localStorage.setItem(
+               `privateKeys${username}`,
+               JSON.stringify(blob)
+            )
+
             await axiosInstance.post("/auth/logout");
-            set({ authUser: null });
+            set({ authUser: null, loginPassword: null });
             get().disconnectSocket();
-            window.alert("Logged out successfully.");
         } catch (error) {
             console.error("Error logging out:", error);
         }

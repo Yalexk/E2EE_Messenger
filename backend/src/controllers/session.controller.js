@@ -150,6 +150,7 @@ export const endSession = async (req, res) => {
         });
 
         if (!initialMessage) {
+            console.log("No initial message found for session end");
             return res.status(404).json({ message: "Session not found" });
         }
 
@@ -166,10 +167,13 @@ export const endSession = async (req, res) => {
         { new: true }
         );
 
-        // Delete the session if the other field is also false
-        if (!updated.sessionInfo.senderSessionActive && !updated.sessionInfo.receiverSessionActive) {
+        // Delete the session if the other field is also false and they have received the message
+        if (!updated.sessionInfo.senderSessionActive && !updated.sessionInfo.receiverSessionActive && updated.sessionInfo.receiverHasReceived) {
+            console.log("Both session flags are false, deleting session message");
             await Message.deleteOne({ _id: updated._id });
             res.status(200).json({ message: "Session ended and deleted successfully" });
+        } else {
+            console.log("Single user session ended");
         }
 
         res.status(200).json({ message: "Session ended successfully for user " + currentUser.username });

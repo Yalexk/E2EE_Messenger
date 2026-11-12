@@ -1,25 +1,20 @@
 import { useState } from 'react';
-import { Dice5, KeyRound, LockKeyhole, MonitorSmartphone } from 'lucide-react';
 import { useAuthStore } from '../store/useAuthStore.js';
-import { Button, Field } from '../components/ui.jsx';
+import { Button, Field, Label } from '../components/ui.jsx';
 import { cx } from '../lib/format.js';
 
 const ADJ = ['quiet', 'brave', 'lucky', 'swift', 'mellow', 'cosmic', 'sunny', 'witty'];
 const NOUN = ['otter', 'falcon', 'panda', 'koala', 'lynx', 'heron', 'yak', 'quokka'];
 const randomName = () => `${ADJ[Math.floor(Math.random() * ADJ.length)]}-${NOUN[Math.floor(Math.random() * NOUN.length)]}${Math.floor(Math.random() * 90 + 10)}`;
 
-function Shell({ icon, title, children, aside }) {
-  const Icon = icon;
+function Shell({ title, children, aside }) {
   return (
-    <div className="mx-auto grid max-w-5xl gap-8 px-4 py-10 sm:px-6 lg:grid-cols-[1fr_22rem] lg:py-16">
-      <div className="card p-6 sm:p-8">
-        <span className="grid size-11 place-items-center rounded-xl bg-ink-700 text-alice">
-          <Icon className="size-5" />
-        </span>
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight">{title}</h1>
+    <div className="wrap grid gap-10 py-12 lg:grid-cols-[minmax(0,1fr)_22rem] lg:py-20">
+      <div className="max-w-xl border border-rule p-6 sm:p-8">
+        <h1 className="text-(length:--text-title) text-ink">{title}</h1>
         <div className="mt-6">{children}</div>
       </div>
-      {aside && <aside className="space-y-4 text-sm leading-relaxed text-ink-300">{aside}</aside>}
+      {aside && <aside className="space-y-4 text-sm text-ink-2">{aside}</aside>}
     </div>
   );
 }
@@ -42,31 +37,30 @@ export function AuthPanel() {
 
   return (
     <Shell
-      icon={KeyRound}
-      title={mode === 'signup' ? 'Create a demo account' : 'Welcome back'}
+      title={mode === 'signup' ? 'Make a demo account' : 'Log in'}
       aside={
         <>
-          <h2 className="font-semibold text-ink-100">What happens when you sign up</h2>
+          <Label>what happens when you sign up</Label>
           <ol className="list-decimal space-y-2 pl-5">
-            <li>Your browser generates an identity key, a signed prekey and 100 one-time prekeys.</li>
-            <li>Only the <strong className="text-ink-100">public</strong> halves go to the server.</li>
-            <li>The private halves are encrypted with a key derived from your password (PBKDF2, 600k rounds) and stay in this browser.</li>
-            <li>You'll find <strong className="text-ink-100">x3dh-bot</strong> waiting: say hi and watch a real handshake happen.</li>
+            <li>Your browser makes your keys.</li>
+            <li>Only the public halves go to the server.</li>
+            <li>The private halves are locked with your password and stay in this browser.</li>
+            <li>x3dh-bot is waiting. Say hi.</li>
           </ol>
-          <p className="text-ink-400">This is a public demo: don't reuse a real password, and messages are deleted after 7 days.</p>
+          <p className="text-muted">Public demo: don’t reuse a real password. Messages are deleted after 7 days.</p>
         </>
       }
     >
-      <div className="mb-6 inline-flex rounded-xl bg-ink-900 p-1" role="tablist">
+      <div className="mb-6 flex border border-rule" role="tablist">
         {['signup', 'login'].map((m) => (
           <button
             key={m}
             role="tab"
             aria-selected={mode === m}
             onClick={() => switchMode(m)}
-            className={cx('rounded-lg px-4 py-1.5 text-sm transition-colors', mode === m ? 'bg-ink-700 text-ink-100' : 'text-ink-400 hover:text-ink-200')}
+            className={cx('stepped flex-1 px-4 py-2 text-sm', mode === m ? 'bg-accent-wash text-ink' : 'text-muted hover:bg-paper-3 hover:text-ink')}
           >
-            {m === 'signup' ? 'Sign up' : 'Log in'}
+            {m === 'signup' ? 'sign up' : 'log in'}
           </button>
         ))}
       </div>
@@ -87,9 +81,9 @@ export function AuthPanel() {
             <button
               type="button"
               onClick={() => setUsername(randomName())}
-              className="absolute top-0 right-0 inline-flex items-center gap-1 text-xs text-ink-400 hover:text-alice"
+              className="stepped absolute top-0 right-0 text-xs text-ink-2 underline decoration-dotted hover:text-accent"
             >
-              <Dice5 className="size-3.5" /> random
+              pick one for me
             </button>
           )}
         </div>
@@ -101,11 +95,11 @@ export function AuthPanel() {
           autoComplete={mode === 'signup' ? 'new-password' : 'current-password'}
           required
           minLength={8}
-          placeholder="at least 8 characters"
+          placeholder="8 characters or more"
         />
-        {error && <p className="text-sm text-eve" role="alert">{error}</p>}
+        {error && <p className="text-sm text-ink" role="alert">error: {error}</p>}
         <Button type="submit" variant="primary" className="w-full" loading={busy}>
-          {busy ? (mode === 'signup' ? 'Generating keys…' : 'Unlocking keys…') : mode === 'signup' ? 'Generate keys & sign up' : 'Log in'}
+          {busy ? (mode === 'signup' ? 'Making keys…' : 'Opening keys…') : mode === 'signup' ? 'Sign up' : 'Log in'}
         </Button>
       </form>
     </Shell>
@@ -116,10 +110,8 @@ export function UnlockPanel() {
   const { authUser, unlock, logout, busy, error } = useAuthStore();
   const [password, setPassword] = useState('');
   return (
-    <Shell icon={LockKeyhole} title={`Unlock your keys, ${authUser.username}`}>
-      <p className="mb-5 text-ink-300">
-        You're still logged in, but your private keys are locked. Enter your password to decrypt them in this browser.
-      </p>
+    <Shell title="Your keys are locked">
+      <p className="mb-5 text-ink-2">You’re still logged in as {authUser.username}. Enter your password to open your keys in this browser.</p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -128,9 +120,9 @@ export function UnlockPanel() {
         className="space-y-4"
       >
         <Field label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required autoFocus />
-        {error && <p className="text-sm text-eve" role="alert">{error}</p>}
+        {error && <p className="text-sm text-ink" role="alert">error: {error}</p>}
         <div className="flex gap-2">
-          <Button type="submit" variant="primary" loading={busy}>Unlock</Button>
+          <Button type="submit" variant="primary" loading={busy}>Open keys</Button>
           <Button type="button" variant="ghost" onClick={logout}>Log out</Button>
         </div>
       </form>
@@ -141,16 +133,13 @@ export function UnlockPanel() {
 export function NoKeysPanel() {
   const { authUser, logout } = useAuthStore();
   return (
-    <Shell icon={MonitorSmartphone} title="Your keys aren't on this device">
-      <div className="space-y-4 text-ink-300">
+    <Shell title="Your keys are in another browser">
+      <div className="space-y-4 text-ink-2">
         <p>
-          <strong className="text-ink-100">{authUser.username}</strong>'s private keys were generated in a different browser and,
-          by design, never left it. The server only has the public halves, so it can't give them back to you.
+          {authUser.username}’s keys were made in the browser you signed up in, and they never leave it. The server only has
+          the public halves.
         </p>
-        <p>
-          This is exactly the trade-off real E2EE messengers face: Signal solves it with device linking, which this demo doesn't
-          implement. Open the browser you signed up in, or create a new account here.
-        </p>
+        <p>Use that browser, or make a new account here.</p>
         <Button variant="primary" onClick={logout}>Log out</Button>
       </div>
     </Shell>

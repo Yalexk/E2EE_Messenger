@@ -200,70 +200,66 @@ export async function handleMessage(message) {
 function greeting(session, previousSessions) {
   const dhCount = session.usedOneTimePreKey ? 4 : 3;
   if (previousSessions > 0) {
-    return `🔁 New X3DH session (#${previousSessions + 1}) with ${dhCount} DH operations. `
-      + 'A fresh ephemeral key means a brand-new shared key: the previous session\'s key could not decrypt this one. '
-      + 'Type /help for things to try.';
+    return `New key agreed (chat #${previousSessions + 1}, ${dhCount} DH steps). Each new chat gets a fresh key, so the old one can’t read it. Type /help for things to try.`;
   }
   return [
-    '👋 Hi! I\'m x3dh-bot, a real X3DH client running on the server.',
-    `We just ran the handshake: you fetched my prekey bundle, verified my signed prekey, did ${dhCount} Diffie-Hellman operations and derived a 256-bit key with HKDF. I did the mirror-image DHs and got the same key, and neither of us ever sent it.`,
-    'Everything you type is AES-256-GCM encrypted in your browser before it leaves. Try:',
-    '• /session: details of our handshake',
-    '• /server: what the server actually stored for that message',
-    '• /explain: why each of the four DHs matters',
-    '• anything else, and I\'ll prove I decrypted it',
-  ].join('\n');
+    "Hi, I’m x3dh-bot. I’m a real X3DH client that runs on the server.",
+    `We just agreed on a secret key: ${dhCount} DH steps on each side, same result, and neither of us sent it.`,
+    "Your messages are encrypted in your browser before they leave. Try:",
+    "/session  how our key was made",
+    "/server   what the server stored for your message",
+    "/explain  what each DH step is for",
+    "or type anything, and I’ll show I can read it.",
+  ].join("\n");
 }
 
 const FACTS = [
-  'DH1 = DH(IK_A, SPK_B) is what proves the message came from you: only your identity key could have produced it.',
-  'The server handed you one of my one-time prekeys and then deleted it, so nobody can replay your initial message to me.',
-  'Your ephemeral key EK_A was thrown away right after the handshake. That\'s what gives forward secrecy.',
-  'The associated data (IK_A ‖ IK_B) is authenticated by AES-GCM but not encrypted: it binds every ciphertext to both of our identities.',
-  'Compare safety numbers (the shield in the chat header) out-of-band to be sure the server didn\'t swap my identity key for its own.',
-  'This demo stops at X3DH. Signal follows it with the Double Ratchet, which derives a new key for every single message.',
+  "DH1 uses your identity key, so only you could have started this chat.",
+  "The server gave you one of my one-time prekeys, then deleted it. Nobody can reuse it.",
+  "Your one-off key (EK) was deleted after the handshake, so this chat stays safe even if your main key leaks later.",
+  "Every message is tied to both our identity keys. Swap either one and decryption fails.",
+  "Open inspect and compare the safety number with me to check nobody swapped our keys.",
+  "This demo stops at X3DH. Signal also changes the key with every message (the Double Ratchet).",
 ];
 
 async function compose(text, message, session, hadPrevious) {
   const cmd = text.trim().toLowerCase();
   const fact = FACTS[(session.messageCount - 1) % FACTS.length];
-  if (cmd === '/help') {
-    return 'Commands: /session · /server · /explain · /fact. Anything else gets echoed back to prove I decrypted it.';
+  if (cmd === "/help") {
+    return "Commands: /session, /server, /explain, /fact. Anything else, I’ll repeat back to show I decrypted it.";
   }
-  if (cmd === '/session') {
+  if (cmd === "/session") {
     const sn = await x3dh.safetyNumber(session.userIdentityKey, state.identity.publicKey);
     return [
-      `Session ${session.sessionId}`,
-      `• DH operations: ${session.usedOneTimePreKey ? '4 (a one-time prekey was available)' : '3 (no one-time prekey left)'}`,
-      `• KDF: HKDF-SHA256, info="${x3dh.PROTOCOL_INFO}"`,
-      '• Cipher: AES-256-GCM, AD = IK_you ‖ IK_bot',
-      `• Started ${session.createdAt.toISOString()}, ${session.messageCount} message(s) so far`,
-      `• Safety number: ${sn}`,
-    ].join('\n');
+      `session  ${session.sessionId}`,
+      `dh steps ${session.usedOneTimePreKey ? "4" : "3 (no one-time prekey was left)"}`,
+      "key      HKDF-SHA256",
+      "cipher   AES-256-GCM",
+      `messages ${session.messageCount}`,
+      `Safety number: ${sn}`,
+    ].join("\n");
   }
-  if (cmd === '/server') {
+  if (cmd === "/server") {
     const ct = x3dh.fromB64(message.messageText);
     return [
-      'Here\'s your "/server" message exactly as the server stored it:',
-      `ciphertext (${ct.length} bytes): ${message.messageText}`,
-      `nonce: ${message.nonce}`,
-      '',
-      'That\'s a 16-byte GCM auth tag plus one byte per byte of plaintext. The server can see the length and the timing, but not the content.',
-    ].join('\n');
+      "This is your last message, exactly as the server stored it:",
+      `${message.messageText}  (${ct.length} bytes)`,
+      "The server can see how long it is and when it came. Not what it says.",
+    ].join("\n");
   }
-  if (cmd === '/explain') {
+  if (cmd === "/explain") {
     return [
-      'DH1 = DH(IK_A, SPK_B): mutual authentication, part 1 (proves it\'s you).',
-      'DH2 = DH(EK_A, IK_B): mutual authentication, part 2 (only I can compute it).',
-      'DH3 = DH(EK_A, SPK_B): forward secrecy. EK_A is gone and SPK_B gets rotated.',
-      'DH4 = DH(EK_A, OPK_B): one-time prekey, single use, so no replays.',
-      'SK = HKDF(0xFF×32 ‖ DH1 ‖ DH2 ‖ DH3 ‖ DH4)',
-    ].join('\n');
+      "DH1  your IK x my SPK: proves it’s you",
+      "DH2  your EK x my IK: proves it’s me",
+      "DH3  your EK x my SPK: keeps old chats safe if keys leak later",
+      "DH4  your EK x my OPK: stops replays, used once",
+      "All four go through HKDF to make one shared key.",
+    ].join("\n");
   }
-  if (cmd === '/fact') return fact;
+  if (cmd === "/fact") return fact;
 
   const clipped = text.length > 280 ? `${text.slice(0, 280)}…` : text;
   const bytes = x3dh.fromB64(message.messageText).length;
-  const changed = hadPrevious ? ', and it looks nothing like your previous message\'s ciphertext' : '';
-  return `🔓 Decrypted: “${clipped}”\nIt reached the server as ${bytes} bytes of ciphertext${changed}.\n\n💡 ${fact}`;
+  const changed = hadPrevious ? ", and it looks nothing like the last one" : "";
+  return `Decrypted: “${clipped}”\nIt reached the server as ${bytes} scrambled bytes${changed}.\n\n${fact}`;
 }

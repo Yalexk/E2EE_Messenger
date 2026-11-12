@@ -12,8 +12,7 @@
   },
   "dependencies": {
     "@e2ee/x3dh": "*",
-    "@fontsource-variable/inter": "^5.3.0",
-    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource-variable/martian-mono": "^5.3.0",
     "@tailwindcss/vite": "^4.3.5",
     "axios": "^1.10.0",
     "lucide-react": "^0.522.0",

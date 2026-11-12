@@ -18,11 +18,11 @@ function ChatLayout() {
   }, [loadUsers]);
 
   return (
-    <div className="relative flex h-[calc(100dvh-3.5rem)] min-h-0">
+    <div className="relative flex h-[calc(100dvh-3rem)] min-h-0">
       <Sidebar className={cx('w-full md:w-72 lg:w-80', selectedUser && 'hidden md:flex')} />
       <Conversation className={cx('min-w-0 flex-1', !selectedUser && 'hidden md:flex md:flex-col')} />
       {inspectorOpen && (
-        <Inspector className="absolute inset-y-0 right-0 z-20 w-full max-w-sm shadow-2xl xl:static xl:z-auto xl:w-96 xl:shadow-none" />
+        <Inspector className="absolute inset-y-0 right-0 z-(--z-dropdown) w-full max-w-sm xl:static xl:z-auto xl:w-96" />
       )}
     </div>
   );
@@ -33,13 +33,13 @@ export default function ChatPage() {
   const checkAuth = useAuthStore((s) => s.checkAuth);
 
   useEffect(() => {
-    document.title = 'Live chat · X3DH, explained by running it';
+    document.title = 'Live chat · x3dh';
     if (useAuthStore.getState().status === 'checking') checkAuth();
   }, [checkAuth]);
 
   if (status === 'checking') {
     return (
-      <div className="grid min-h-[60vh] place-items-center text-ink-400">
+      <div className="grid min-h-[60vh] place-items-center text-muted">
         <Loader2 className="size-6 animate-spin" aria-label="Loading" />
       </div>
     );

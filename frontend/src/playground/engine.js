@@ -10,16 +10,16 @@ import * as x3dh from '@e2ee/x3dh';
 export const OPK_COUNT = 5;
 
 export const STEPS = [
-  { id: 'intro', title: 'Meet Alice & Bob', actor: 'both' },
-  { id: 'keys', title: 'Generate keys', actor: 'both' },
-  { id: 'publish', title: 'Bob publishes a bundle', actor: 'bob' },
-  { id: 'fetch', title: 'Alice fetches it', actor: 'alice' },
-  { id: 'verify', title: 'Verify the signature', actor: 'alice' },
-  { id: 'ephemeral', title: 'Ephemeral key', actor: 'alice' },
-  { id: 'dh', title: 'Four Diffie-Hellmans', actor: 'alice' },
-  { id: 'kdf', title: 'Derive the secret', actor: 'alice' },
-  { id: 'send', title: 'Initial message', actor: 'alice' },
-  { id: 'receive', title: 'Bob derives the same key', actor: 'bob' },
+  { id: 'intro', title: 'Meet Alice and Bob', actor: 'both' },
+  { id: 'keys', title: 'Make keys', actor: 'both' },
+  { id: 'publish', title: 'Bob uploads his keys', actor: 'bob' },
+  { id: 'fetch', title: 'Alice fetches them', actor: 'alice' },
+  { id: 'verify', title: 'Check the signature', actor: 'alice' },
+  { id: 'ephemeral', title: 'A one-off key', actor: 'alice' },
+  { id: 'dh', title: 'Four DH steps', actor: 'alice' },
+  { id: 'kdf', title: 'One shared key', actor: 'alice' },
+  { id: 'send', title: 'First message', actor: 'alice' },
+  { id: 'receive', title: 'Bob gets the same key', actor: 'bob' },
   { id: 'chat', title: 'Chat', actor: 'both' },
 ];
 

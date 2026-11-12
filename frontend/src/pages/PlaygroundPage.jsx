@@ -1,5 +1,4 @@
 import { useEffect } from 'react';
-import { FastForward, Pause, Play, RotateCcw } from 'lucide-react';
 import { usePlayground } from '../playground/usePlayground.js';
 import { Stepper } from '../playground/Stepper.jsx';
 import { Stage } from '../playground/Stage.jsx';
@@ -12,10 +11,10 @@ export default function PlaygroundPage() {
   const { state, step, busy, playing, setPlaying, next, reset, skipToChat, setOption, chat } = pg;
 
   useEffect(() => {
-    document.title = 'Playground · X3DH, explained by running it';
+    document.title = 'Playground · x3dh';
   }, []);
 
-  // → advances, unless you're typing.
+  // The right arrow advances, unless you're typing.
   useEffect(() => {
     const onKey = (e) => {
       if (e.key !== 'ArrowRight' || e.metaKey || e.ctrlKey || e.altKey) return;
@@ -30,34 +29,30 @@ export default function PlaygroundPage() {
   const atEnd = step.id === 'chat';
 
   return (
-    <div className="mx-auto max-w-[96rem] px-4 py-6 sm:px-6 sm:py-8">
+    <div className="wrap py-8 sm:py-10">
       <div className="flex flex-wrap items-end gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">X3DH Playground</h1>
-          <p className="mt-1 text-ink-300">Alice, an untrusted server, and Bob, all running in your browser. Nothing here touches a network.</p>
+          <h1 className="text-(length:--text-section) text-ink">Playground</h1>
+          <p className="mt-2 text-ink-2">Alice, a server and Bob, all in your browser.</p>
         </div>
         <div className="ml-auto flex gap-2">
-          <Button size="sm" variant="ghost" onClick={reset} disabled={busy}>
-            <RotateCcw className="size-4" /> Reset
-          </Button>
+          <Button size="sm" variant="ghost" onClick={reset} disabled={busy}>reset</Button>
           <Button size="sm" onClick={() => setPlaying(!playing)} disabled={atEnd || !pg.canAdvance}>
-            {playing ? <Pause className="size-4" /> : <Play className="size-4" />} {playing ? 'Pause' : 'Autoplay'}
+            {playing ? 'pause' : 'autoplay'}
           </Button>
-          <Button size="sm" onClick={skipToChat} disabled={atEnd || busy}>
-            <FastForward className="size-4" /> Skip to chat
-          </Button>
+          <Button size="sm" onClick={skipToChat} disabled={atEnd || busy}>skip to chat</Button>
         </div>
       </div>
 
-      <div className="mt-5">
+      <div className="mt-6">
         <Stepper current={state.step} />
       </div>
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(17rem,22rem)_minmax(0,1fr)_minmax(17rem,22rem)]">
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(16rem,21rem)_minmax(0,1fr)_minmax(16rem,21rem)]">
         <div className="order-2 lg:order-1">
           <PartyPanel party="alice" state={state} stepId={step.id} onChat={chat} busy={busy} />
         </div>
-        <div className="order-1 flex flex-col gap-5 lg:order-2">
+        <div className="order-1 flex flex-col gap-6 lg:order-2">
           <Stage pg={pg} />
           <ServerPanel state={state} onOption={setOption} />
         </div>

@@ -11,7 +11,7 @@ createRoot(document.getElementById('root')).render(
       <App />
       <Toaster
         position="bottom-center"
-        toastOptions={{ style: { background: '#151823', color: '#e7e9f0', border: '1px solid #2a2f40' } }}
+        toastOptions={{ style: { background: 'var(--color-paper-2)', color: 'var(--color-ink)', border: '1px solid var(--color-rule)', borderRadius: 0 } }}
       />
     </BrowserRouter>
   </StrictMode>,

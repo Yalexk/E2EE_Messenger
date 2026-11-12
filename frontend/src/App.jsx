@@ -9,7 +9,7 @@ const ChatPage = lazy(() => import('./pages/ChatPage.jsx'));
 
 function Spinner() {
   return (
-    <div className="grid min-h-[50vh] place-items-center text-ink-400">
+    <div className="grid min-h-[50vh] place-items-center text-muted">
       <Loader2 className="size-6 animate-spin" aria-label="Loading" />
     </div>
   );
@@ -17,10 +17,10 @@ function Spinner() {
 
 function NotFound() {
   return (
-    <div className="mx-auto max-w-xl px-6 py-24 text-center">
-      <p className="font-mono text-sm text-ink-400">404</p>
-      <h1 className="mt-2 text-3xl font-semibold">This page decrypted to nothing.</h1>
-      <Link to="/" className="mt-6 inline-block text-alice hover:underline">Back home</Link>
+    <div className="wrap py-24">
+      <p className="text-sm text-muted">error 404</p>
+      <h1 className="mt-2 text-(length:--text-title) text-ink">Nothing at this address.</h1>
+      <Link to="/" className="mt-6 inline-block text-ink-2 underline decoration-dotted hover:text-accent">Go home</Link>
     </div>
   );
 }
@@ -30,7 +30,7 @@ export default function App() {
   const fullBleed = pathname.startsWith('/chat');
   return (
     <div className="flex min-h-dvh flex-col">
-      <SiteHeader />
+      <SiteHeader fullBleed={fullBleed} />
       <main className="flex-1">
         <Suspense fallback={<Spinner />}>
           <Routes>

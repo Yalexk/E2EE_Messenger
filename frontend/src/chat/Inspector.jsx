@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, X } from 'lucide-react';
-import { safetyNumber, PROTOCOL_INFO } from '@e2ee/x3dh';
+import { safetyNumber } from '@e2ee/x3dh';
 import { useAuthStore } from '../store/useAuthStore.js';
 import { useChatStore } from '../store/useChatStore.js';
 import { KeyChip, KeyName } from '../components/KeyChip.jsx';
-import { SectionLabel } from '../components/ui.jsx';
+import { Label } from '../components/ui.jsx';
 import { hex, cx } from '../lib/format.js';
 
-/** Shows how the current conversation's key was agreed. */
+/** How this conversation's key was made. */
 export function Inspector({ className }) {
   const { keys } = useAuthStore();
   const { session, sessionStatus, selectedUser, setInspectorOpen } = useChatStore();
@@ -23,104 +22,87 @@ export function Inspector({ className }) {
   }, [session?.peerIdentityKey, keys.identity.publicKey]);
 
   const t = session?.trace;
-  const me = t?.role === 'initiator' ? 'A' : 'B';
 
   return (
-    <aside className={cx('scrollbar-thin flex min-h-0 flex-col overflow-y-auto border-l border-ink-700 bg-ink-900/95', className)} aria-label="Protocol inspector">
-      <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-ink-700 bg-ink-900/95 p-4 backdrop-blur">
-        <h2 className="font-semibold">Protocol inspector</h2>
-        <button onClick={() => setInspectorOpen(false)} className="ml-auto rounded-lg p-1.5 text-ink-400 hover:bg-ink-800 hover:text-ink-100" aria-label="Close inspector">
-          <X className="size-4" />
+    <aside className={cx('scroll-thin flex min-h-0 flex-col overflow-y-auto border-l border-rule bg-paper', className)} aria-label="Inspector">
+      <div className="sticky top-0 z-(--z-raised) flex items-center gap-2 border-b border-rule bg-paper p-4">
+        <h2 className="text-base text-ink">inspect</h2>
+        <button onClick={() => setInspectorOpen(false)} className="stepped ml-auto px-2 py-1 text-xs text-ink-2 hover:bg-paper-3 hover:text-ink" aria-label="Close">
+          close
         </button>
       </div>
 
       {!selectedUser ? (
-        <p className="p-4 text-sm text-ink-400">Pick a conversation to see its handshake.</p>
+        <p className="p-4 text-sm text-muted">Open a chat to see how its key was made.</p>
       ) : sessionStatus !== 'ready' || !t ? (
-        <p className="p-4 text-sm text-ink-400">{sessionStatus === 'handshaking' ? 'Running X3DH…' : 'No session yet.'}</p>
+        <p className="p-4 text-sm text-muted">{sessionStatus === 'handshaking' ? 'running X3DH…' : 'No key yet.'}</p>
       ) : (
-        <div className="space-y-6 p-4 text-sm">
-          <div>
-            <SectionLabel>Your role</SectionLabel>
-            <p className="mt-1.5 text-ink-200">
+        <div className="space-y-7 p-4 text-sm">
+          <div className="space-y-1">
+            <Label>who started it</Label>
+            <p className="text-ink-2">
               {t.role === 'initiator'
-                ? `You started this session: you fetched ${selectedUser.username}'s bundle and ran X3DH as "Alice".`
-                : `${selectedUser.username} started this session; you ran the responder ("Bob") side when you opened the chat.`}
+                ? `You did. You fetched ${selectedUser.username}’s keys and played Alice.`
+                : `${selectedUser.username} did. You played Bob when you opened the chat.`}
             </p>
-            <p className="mt-1 text-xs text-ink-400">Session started {new Date(session.createdAt).toLocaleString()}</p>
+            <p className="text-xs text-muted">{new Date(session.createdAt).toLocaleString()}</p>
           </div>
 
           {t.bundle && (
             <div className="space-y-1.5">
-              <SectionLabel>Bundle you fetched</SectionLabel>
+              <Label>their public keys</Label>
               <KeyChip kind="IK" owner="B" value={t.bundle.identityKey} />
               <KeyChip kind="SPK" owner="B" value={t.bundle.signedPreKey} />
-              <p className="flex items-center gap-1.5 text-xs text-bob">
-                <CheckCircle2 className="size-3.5" /> SPK signature verified with IK_B (Ed25519)
-              </p>
+              <p className="text-xs text-accent">signature checked</p>
               {t.bundle.oneTimePreKey ? (
                 <KeyChip kind="OPK" owner="B" value={t.bundle.oneTimePreKey.publicKey} />
               ) : (
-                <p className="text-xs text-ik">No one-time prekey was available: 3-DH handshake.</p>
-              )}
-              {t.bundle.remainingOneTimePreKeys != null && (
-                <p className="text-xs text-ink-400">{t.bundle.remainingOneTimePreKeys} one-time prekeys left on the server after this fetch.</p>
+                <p className="text-xs text-ink-2">No one-time prekey was left, so this used 3 steps.</p>
               )}
             </div>
           )}
 
           <div className="space-y-1.5">
-            <SectionLabel>Ephemeral key</SectionLabel>
+            <Label>one-off key</Label>
             <KeyChip kind="EK" owner="A" value={t.ephemeralPublicKey} />
-            <p className="text-xs text-ink-400">{t.role === 'initiator' ? 'Its private half was deleted right after the handshake.' : 'Sent by the initiator in the initial message.'}</p>
           </div>
 
-          <div className="space-y-2">
-            <SectionLabel>Diffie-Hellman outputs ({t.steps.length})</SectionLabel>
-            {t.steps.map((s) => {
-              const [mk, mo] = s.mine.split('_');
-              const [tk, to] = s.theirs.split('_');
-              return (
-                <div key={s.label} className="rounded-lg border border-ink-700 bg-ink-850 p-2.5">
-                  <p className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-mono font-semibold">{s.label}</span>
-                    <span className="text-ink-500">=</span>
-                    <span className="text-ink-400">DH(</span>
-                    <KeyName kind={mk} owner={mo} />
-                    <span className="text-ink-400">,</span>
-                    <KeyName kind={tk} owner={to} />
-                    <span className="text-ink-400">)</span>
-                  </p>
-                  <p className="mt-1 truncate font-mono text-xs text-ink-300" title={hex(s.out)}>{hex(s.out, { short: true, head: 16, tail: 8 })}</p>
-                  <p className="mt-1 text-xs text-ink-400">{s.purpose}</p>
-                </div>
-              );
-            })}
-            <p className="text-xs text-ink-400">
-              On this screen you are {me === 'A' ? 'A (Alice)' : 'B (Bob)'}, and {selectedUser.username} is {me === 'A' ? 'B (Bob)' : 'A (Alice)'}.
-            </p>
+          <div className="space-y-1">
+            <Label>the {t.steps.length} DH steps</Label>
+            <ol className="border-t border-rule">
+              {t.steps.map((s) => {
+                const [mk, mo] = s.mine.split('_');
+                const [tk, to] = s.theirs.split('_');
+                return (
+                  <li key={s.label} className="border-b border-rule py-2">
+                    <p>
+                      <span className="mr-2 text-muted">{s.label}</span>
+                      <KeyName kind={mk} owner={mo} /> <span className="text-muted">x</span> <KeyName kind={tk} owner={to} />
+                    </p>
+                    <p className="truncate text-xs text-ink-2" title={hex(s.out)}>{hex(s.out, { short: true, head: 16, tail: 8 })}</p>
+                    <p className="text-xs text-muted">{s.purpose}</p>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
 
           <div className="space-y-1.5">
-            <SectionLabel>Shared secret</SectionLabel>
+            <Label>shared key</Label>
             <KeyChip kind="SK" value={session.sharedKey} secret />
-            <p className="font-mono text-xs text-ink-400">HKDF-SHA256 · {t.ikmBytes} B in · info "{PROTOCOL_INFO}"</p>
-            <p className="text-xs text-ink-400">Messages: AES-256-GCM with AD = IK_A ‖ IK_B, fresh 96-bit nonce each.</p>
+            <p className="text-xs text-muted">Made with HKDF. Messages use AES-256-GCM.</p>
           </div>
 
           <div className="space-y-2">
-            <SectionLabel>Safety number</SectionLabel>
+            <Label>safety number</Label>
             {sn ? (
-              <div className="grid grid-cols-4 gap-x-3 gap-y-1 rounded-xl border border-ink-700 bg-ink-850 p-3 font-mono text-sm tracking-wider">
+              <p className="grid grid-cols-4 gap-x-3 gap-y-1 border border-rule bg-paper-2 p-3 text-ink">
                 {sn.split(' ').map((g, i) => <span key={i}>{g}</span>)}
-              </div>
+              </p>
             ) : (
-              <p className="text-ink-400">computing…</p>
+              <p className="text-muted">working…</p>
             )}
-            <p className="text-xs text-ink-400">
-              Derived from both identity keys. If {selectedUser.username} sees the same digits on their screen, the server didn't
-              swap anyone's identity key. X3DH alone can't detect that: the bundle comes from the server.
-            </p>
+            <p className="text-xs text-muted">If {selectedUser.username} sees the same digits, nobody swapped your keys.</p>
           </div>
         </div>
       )}

@@ -176,10 +176,10 @@ export async function kdf(dhOutputs) {
 /* ------------------------------------------------------------------------ */
 
 const PURPOSE = {
-  DH1: 'Authenticates Alice: only she holds IK_A.',
-  DH2: 'Authenticates Bob: only he holds IK_B.',
-  DH3: 'Forward secrecy: SPK_B is rotated and EK_A is thrown away.',
-  DH4: 'Replay protection: OPK_B is deleted after a single use.',
+  DH1: 'Proves it’s Alice. Only she has IK_A.',
+  DH2: 'Proves it’s Bob. Only he has IK_B.',
+  DH3: 'Keeps this chat safe even if long-term keys leak later.',
+  DH4: 'Stops replays. OPK_B is used once, then deleted.',
 };
 
 /**

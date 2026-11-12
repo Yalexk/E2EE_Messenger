@@ -3,6 +3,16 @@
 An end-to-end encrypted messenger built on Signal's [X3DH key agreement](https://signal.org/docs/specifications/x3dh/),
 with an interactive visualizer that walks through the handshake step by step, using real keys.
 
+## How this was built
+
+I built the original messenger in 2025 as a university security project: the X3DH
+key agreement, key generation and storage, and the session flow.
+
+In 2026 I revamped it with an AI coding assistant (Claude). It helped me redesign
+the frontend, add the interactive playground and demo bot, fix security issues in
+the backend, align the key derivation with the X3DH spec, write tests, and set up
+deployment. The git history shows exactly what changed.
+
 - **Playground** (`/playground`): Alice, an untrusted server and Bob, all simulated in your browser. Step through
   key generation, bundle publishing, signature verification, the four Diffie-Hellmans and HKDF. Then try to break it:
   have the server swap Bob's signed prekey, run out of one-time prekeys, or flip bits in transit.

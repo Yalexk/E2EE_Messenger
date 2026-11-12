@@ -36,9 +36,10 @@ export function SiteFooter() {
     <footer className="border-t border-rule">
       <div className="wrap grid gap-6 py-12 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-start">
         <p className="w-fit bg-accent px-3 py-1 font-bold text-accent-ink">x3dh</p>
-        <p className="max-w-[52ch] text-sm text-muted">
-          A learning project: Signal’s X3DH key agreement, built from scratch and shown step by step. Not a replacement for Signal.
-        </p>
+        <div className="max-w-[52ch] space-y-2 text-sm text-muted">
+          <p>A learning project: Signal’s X3DH key agreement, built from scratch and shown step by step. Not a replacement for Signal.</p>
+          <p>Built by Alex Yecies. Revamped in 2026 with help from an AI coding assistant.</p>
+        </div>
         <ul className="flex gap-5 text-sm">
           <li><a href="https://signal.org/docs/specifications/x3dh/" target="_blank" rel="noreferrer" className="text-ink-2 decoration-dotted hover:text-accent">X3DH spec</a></li>
           <li><a href={REPO_URL} target="_blank" rel="noreferrer" className="text-ink-2 decoration-dotted hover:text-accent">source</a></li>

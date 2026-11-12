@@ -1,160 +1,141 @@
-import { generateToken } from "../lib/utils.js";
-import User from "../models/user.model.js";
-import bcrypt from "bcryptjs";
+import bcrypt from 'bcryptjs';
+import { verifySignedPreKey } from '@e2ee/x3dh';
+import { generateToken, cookieOptions } from '../lib/utils.js';
+import User, { publicUser } from '../models/user.model.js';
+import { BOT_USERNAME } from '../bot/bot.js';
+import { USERNAME_RE, isKey, isSignature, isShortId, isOneTimePreKeyList } from '../lib/validate.js';
 
-export const signup = async (req, res) => {
-    const {
-        username,
-        password,
-        identityKey,
-        edIdentityKey,
-        signedPreKey,
-        signedPreKeySignature,
-        oneTimePreKeys
-    } = req.body;
+export const MAX_ONE_TIME_PREKEYS = 200;
+const OPK_LOW_WATER = 20;
+const SPK_MAX_AGE_DAYS = 7;
 
-    try {
-        if (!username || !password) {
-            return res.status(400).json({ message: "All fields are required" });
-        }
-        
-        if (password.length < 6) {
-            return res.status(400).json({ message: "Password must be at least 6 characters" });
-        }
+function bundleError(body) {
+  const { identityKey, edIdentityKey, signedPreKeyId, signedPreKey, signedPreKeySignature } = body;
+  if (!isKey(identityKey) || !isKey(edIdentityKey)) return 'Invalid identity key';
+  if (!isShortId(signedPreKeyId) || !isKey(signedPreKey) || !isSignature(signedPreKeySignature)) return 'Invalid signed prekey';
+  // The server checks the signature too: it refuses to publish a bundle that
+  // clients would reject anyway.
+  if (!verifySignedPreKey(edIdentityKey, signedPreKey, signedPreKeySignature)) return 'Signed prekey signature does not verify';
+  return null;
+}
 
-        const user = await User.findOne({ username });
-        if (user) return res.status(400).json({ message: "Username already in use" });
+function loginPayload(user) {
+  const ageDays = (Date.now() - new Date(user.signedPreKeyUpdatedAt).getTime()) / 86_400_000;
+  const remaining = user.oneTimePreKeys?.length ?? 0;
+  return {
+    user: publicUser(user),
+    signedPreKeyId: user.signedPreKeyId,
+    oneTimePreKeysRemaining: remaining,
+    needsOneTimePreKeys: remaining < OPK_LOW_WATER,
+    needsSignedPreKeyRotation: ageDays > SPK_MAX_AGE_DAYS,
+  };
+}
 
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-        const newUser = new User({
-            username,
-            password: hashedPassword,
-            identityKey,
-            edIdentityKey,
-            signedPreKey,
-            signedPreKeySignature,
-            oneTimePreKeys,
-        });
-
-        if (newUser) {
-            // generate jwt token
-            generateToken(newUser._id, res);
-            await newUser.save();
-            return res.status(201).json({
-            message: "User created successfully",
-            user: {
-                _id: newUser._id,
-                username: newUser.username,
-                identityKey: newUser.identityKey,
-                edIdentityKey: newUser.edIdentityKey,
-                signedPreKey: newUser.signedPreKey,
-                signedPreKeySignature: newUser.signedPreKeySignature,
-                oneTimePreKeys: newUser.oneTimePreKeys,
-            },
-        });
-        } else {
-            return res.status(400).json({ message: "Invalid user data" });
-        }
-
-    } catch (error) {
-        console.error("Error during signup:", error);
-        return res.status(500).json({ message: "Internal server error" });
+export const signup = async (req, res, next) => {
+  try {
+    const { username, password, oneTimePreKeys } = req.body ?? {};
+    if (typeof username !== 'string' || !USERNAME_RE.test(username)) {
+      return res.status(400).json({ message: 'Username must be 3-24 characters: letters, numbers, . _ -' });
     }
+    if (username.toLowerCase() === BOT_USERNAME) return res.status(400).json({ message: 'That username is reserved' });
+    if (typeof password !== 'string' || password.length < 8 || password.length > 128) {
+      return res.status(400).json({ message: 'Password must be 8-128 characters' });
+    }
+    const err = bundleError(req.body);
+    if (err) return res.status(400).json({ message: err });
+    if (!isOneTimePreKeyList(oneTimePreKeys, MAX_ONE_TIME_PREKEYS)) {
+      return res.status(400).json({ message: 'Invalid one-time prekeys' });
+    }
+
+    if (await User.exists({ username: new RegExp(`^${escapeRegex(username)}$`, 'i') })) {
+      return res.status(400).json({ message: 'Username already taken' });
+    }
+
+    const user = await User.create({
+      username,
+      password: await bcrypt.hash(password, 10),
+      identityKey: req.body.identityKey,
+      edIdentityKey: req.body.edIdentityKey,
+      signedPreKeyId: req.body.signedPreKeyId,
+      signedPreKey: req.body.signedPreKey,
+      signedPreKeySignature: req.body.signedPreKeySignature,
+      oneTimePreKeys: oneTimePreKeys.map(({ id, publicKey }) => ({ id, publicKey })),
+    });
+
+    generateToken(user._id, res);
+    res.status(201).json(loginPayload(user));
+  } catch (error) {
+    if (error?.code === 11000) return res.status(400).json({ message: 'Username already taken' });
+    next(error);
+  }
 };
 
-export const login = async (req, res) => {
-    const { username, password } = req.body;
-    try {
-        const user = await User.findOne({ username });
-        if (!user) {
-            return res.status(400).json({ message: "Invalid username or password" });
-        }
-
-        const isPasswordCorrect = await bcrypt.compare(password, user.password);
-        
-        if (!isPasswordCorrect) {
-            return res.status(400).json({ message: "Invalid username or password" });
-        }
-
-        // generate jwt token
-        generateToken(user._id, res);
-
-        // check number of one time prekeys, if less than 10, generate more
-        const generateOtks = user.oneTimePreKeys.length < 10;
-
-        // check if its been 3 days since the last prekey update
-        const lastUpdated = new Date(user.lastUpdated);
-        const daysSinceLastUpdate = (Date.now() - lastUpdated.getTime()) / (1000 * 60 * 60 * 24); // in days
-
-        res.status(200).json({
-            message: "Login successful",
-            user: {
-                _id: user._id,
-                username: user.username,
-            },
-            generateOtks: generateOtks,
-            generateNewPrekeys: daysSinceLastUpdate > 3
-        });
-    } catch (error) {
-        console.log("Error during login:", error.message);
-        return res.status(500).json({ message: "Internal server error" });
+export const login = async (req, res, next) => {
+  try {
+    const { username, password } = req.body ?? {};
+    if (typeof username !== 'string' || typeof password !== 'string') {
+      return res.status(400).json({ message: 'Username and password are required' });
     }
+    const user = await User.findOne({ username, isBot: { $ne: true } });
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(400).json({ message: 'Invalid username or password' });
+    }
+    generateToken(user._id, res);
+    res.status(200).json(loginPayload(user));
+  } catch (error) {
+    next(error);
+  }
 };
 
 export const logout = (req, res) => {
-    try {
-        res.cookie("jwt", "", { maxAge: 0 });
-        res.status(200).json({ message: "Logout successful" });
-    } catch (error) {
-        console.error("Error during logout:", error);
-        return res.status(500).json({ message: "Internal server error" });
-    }
+  res.clearCookie('jwt', cookieOptions());
+  res.status(200).json({ message: 'Logged out' });
 };
 
-export const checkAuth = (req, res) => {
-    try {
-        res.status(200).json(req.user);
-    } catch (error) {
-        console.error("Error in checkAuth:", error);
-        return res.status(500).json({ message: "Internal server error" });
-    }
+export const checkAuth = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password');
+    res.status(200).json(loginPayload(user));
+  } catch (error) {
+    next(error);
+  }
 };
 
-export const addOneTimePreKeys = async (req, res) => {
-    const { username, oneTimePreKeys } = req.body;
-
-    try {
-        const user = await User.findOne({ username });
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        } 
-        user.oneTimePreKeys.push(...oneTimePreKeys);
-        await user.save();
-    } catch (error) {
-        console.error("Error adding one-time prekeys:", error);
-        return res.status(500).json({ message: "Internal server error" });
+/** Top up *your own* one-time prekeys. */
+export const addOneTimePreKeys = async (req, res, next) => {
+  try {
+    const { oneTimePreKeys } = req.body ?? {};
+    if (!isOneTimePreKeyList(oneTimePreKeys, MAX_ONE_TIME_PREKEYS)) {
+      return res.status(400).json({ message: 'Invalid one-time prekeys' });
     }
-}
+    const user = await User.findById(req.user._id).select('oneTimePreKeys');
+    const room = MAX_ONE_TIME_PREKEYS - user.oneTimePreKeys.length;
+    const accepted = oneTimePreKeys.slice(0, Math.max(0, room)).map(({ id, publicKey }) => ({ id, publicKey }));
+    await User.updateOne({ _id: req.user._id }, { $push: { oneTimePreKeys: { $each: accepted } } });
+    res.status(200).json({ accepted: accepted.map((k) => k.id), total: user.oneTimePreKeys.length + accepted.length });
+  } catch (error) {
+    next(error);
+  }
+};
 
-export const replaceSignedPrekey = async (req, res) => {
-    const { username, signedPreKey, signedPreKeySignature } = req.body;
-
-    try {
-        const user = await User.findOne({ username });
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
-        } 
-
-        user.signedPreKey = signedPreKey;
-        user.signedPreKeySignature = signedPreKeySignature;
-        user.lastUpdatedPrekey = new Date();
-        await user.save();
-
-        res.status(200).json({ message: "Signed prekey updated successfully" });
-    } catch (error) {
-        console.error("Error adding one-time prekeys:", error);
-        return res.status(500).json({ message: "Internal server error" });
+/** Rotate *your own* signed prekey. The signature must verify against your identity key. */
+export const replaceSignedPrekey = async (req, res, next) => {
+  try {
+    const { signedPreKeyId, signedPreKey, signedPreKeySignature } = req.body ?? {};
+    if (!isShortId(signedPreKeyId) || !isKey(signedPreKey) || !isSignature(signedPreKeySignature)) {
+      return res.status(400).json({ message: 'Invalid signed prekey' });
     }
-}
+    if (!verifySignedPreKey(req.user.edIdentityKey, signedPreKey, signedPreKeySignature)) {
+      return res.status(400).json({ message: 'Signed prekey signature does not verify against your identity key' });
+    }
+    await User.updateOne(
+      { _id: req.user._id },
+      { $set: { signedPreKeyId, signedPreKey, signedPreKeySignature, signedPreKeyUpdatedAt: new Date() } },
+    );
+    res.status(200).json({ message: 'Signed prekey rotated' });
+  } catch (error) {
+    next(error);
+  }
+};

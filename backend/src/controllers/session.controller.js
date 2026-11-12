@@ -1,259 +1,148 @@
 import Message from '../models/message.model.js';
 import User from '../models/user.model.js';
-import { getReceiverSocketId, io } from '../lib/socket.js';
+import { emitToUser } from '../lib/socket.js';
+import * as bot from '../bot/bot.js';
+import { isObjectId, isKey, isGcmNonce, isB64, isShortId, MAX_MESSAGE_BYTES } from '../lib/validate.js';
 
-export const sendInitialMessage = async (req, res) => {
-    try {
-        const { id: receiverId } = req.params;
-        const senderId = req.user._id;
-        const senderIdentityKey = req.user.identityKey;
-        const {
-            sessionId,
-            encryptedMessage, 
-            nonce,
-            ephemeralKeyPublic,
-            otkKeyId,
-        } = req.body;
-    
-        const initialMessage = new Message({
-            senderId,
-            receiverId,
-            messageText: encryptedMessage,
-            isInitialMessage: true,
-            ephemeralKeyPublic,
-            senderIdentityKey,
-            otkKeyId,
-            nonce,
-            sessionId,
-        });
+const pairQuery = (a, b) => ({
+  isInitialMessage: true,
+  $or: [
+    { senderId: a, receiverId: b },
+    { senderId: b, receiverId: a },
+  ],
+});
 
-        await initialMessage.save();
+/**
+ * Hand out a prekey bundle. Per the X3DH spec, the one-time prekey is
+ * removed from the server the moment it is handed out, so it can never be
+ * given to two different initiators.
+ */
+export const getKeysRoute = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!isObjectId(id)) return res.status(400).json({ message: 'Invalid user id' });
+    if (id === String(req.user._id)) return res.status(400).json({ message: "You can't start a session with yourself" });
 
-        // Emit socket notification to the receiver
-        const receiverSocketId = getReceiverSocketId(receiverId);
-        if (receiverSocketId) {
-            io.to(receiverSocketId).emit("sessionStarted", {
-                startedBy: senderId,
-                message: "New secure session started"
-            });
-        }
+    const before = await User.findOneAndUpdate(
+      { _id: id },
+      { $pop: { oneTimePreKeys: -1 } },
+      { new: false, projection: { password: 0 } },
+    ).lean();
+    if (!before) return res.status(404).json({ message: 'User not found' });
 
-        console.log("Initial message sent:", initialMessage);
+    const oneTimePreKey = before.oneTimePreKeys[0] ?? null;
+    const remaining = Math.max(0, before.oneTimePreKeys.length - 1);
 
-        res.status(201).json(initialMessage);
-    } catch (error) {
-        console.error("Error sending initial message:", error.message);
-        res.status(500).json({ message: "Internal server error" });
-    };
+    if (before.isBot) bot.replenishOneTimePreKeys().catch((e) => console.error('[bot] replenish failed', e));
+    else if (remaining < 20) emitToUser(id, 'prekeysLow', { remaining });
+
+    res.status(200).json({
+      userId: before._id,
+      identityKey: before.identityKey,
+      edIdentityKey: before.edIdentityKey,
+      signedPreKeyId: before.signedPreKeyId,
+      signedPreKey: before.signedPreKey,
+      signedPreKeySignature: before.signedPreKeySignature,
+      oneTimePreKey,
+      remainingOneTimePreKeys: remaining,
+    });
+  } catch (error) {
+    next(error);
+  }
 };
 
-export const getInitialMessage = async (req, res) => {
-    try {
-        // find a message where both ids match
-        const me = req.user._id;
-        const them = req.params.id;
-
-        const initialMessage = await Message.findOne({
-            isInitialMessage: true,
-            $or: [
-                { senderId: them,  receiverId: me   },
-                { senderId: me,    receiverId: them }
-            ]
-        }).sort({ createdAt: -1 });
-
-        if (!initialMessage) {
-            return res.status(200).json({ message: "Initial message not found" });
-        }
-
-        // console.log("Initial message received:", initialMessage);
-
-        // delete the initial message from the database after fetching it
-        //await Message.deleteOne({ _id: initialMessage._id });
-        
-        res.status(200).json(initialMessage);
-
-
-    } catch (error) {
-        console.error("Error fetching initial message:", error.message);
-        res.status(500).json({ message: "Internal server error" });
+export const sendInitialMessage = async (req, res, next) => {
+  try {
+    const { id: receiverId } = req.params;
+    const { sessionId, encryptedMessage, nonce, ephemeralKeyPublic, otkKeyId, signedPreKeyId } = req.body ?? {};
+    if (!isObjectId(receiverId) || receiverId === String(req.user._id)) return res.status(400).json({ message: 'Invalid receiver' });
+    if (!isShortId(sessionId, 100) || !isB64(encryptedMessage, MAX_MESSAGE_BYTES) || !isGcmNonce(nonce)
+      || !isKey(ephemeralKeyPublic) || !isShortId(signedPreKeyId) || (otkKeyId != null && !isShortId(otkKeyId))) {
+      return res.status(400).json({ message: 'Malformed initial message' });
     }
+    if (!(await User.exists({ _id: receiverId }))) return res.status(404).json({ message: 'User not found' });
+
+    // A new handshake supersedes any older one between this pair.
+    await Message.deleteMany(pairQuery(req.user._id, receiverId));
+
+    const initial = await Message.create({
+      senderId: req.user._id,
+      receiverId,
+      sessionId,
+      messageText: encryptedMessage,
+      nonce,
+      isInitialMessage: true,
+      senderIdentityKey: req.user.identityKey,
+      ephemeralKeyPublic,
+      signedPreKeyId,
+      otkKeyId: otkKeyId ?? null,
+    });
+
+    let botAccepted = null;
+    if (bot.isBot(receiverId)) {
+      botAccepted = !!(await bot.handleInitialMessage(initial.toObject()));
+    } else {
+      emitToUser(receiverId, 'sessionStarted', { from: String(req.user._id), sessionId });
+    }
+
+    res.status(201).json({ ...initial.toObject(), botAccepted });
+  } catch (error) {
+    next(error);
+  }
 };
 
-export const getKeys = async (receiverId) => {
-    try {
-        const receiver = await User.findById(receiverId);
-        if (!receiver) {
-            return null;
-        }
-
-        // Check if the user has one-time prekeys available
-        let oneTimePreKeys = null;
-        let oneTimePreKey = null;
-        let otkKeyId = null;
-
-        if (receiver.oneTimePreKeys && receiver.oneTimePreKeys.length > 0) {
-            oneTimePreKeys = receiver.oneTimePreKeys;
-            const randomIndex = Math.floor(Math.random() * receiver.oneTimePreKeys.length);
-            oneTimePreKey = receiver.oneTimePreKeys[randomIndex];
-            otkKeyId = oneTimePreKey.id;
-        }
-
-        const keys = {
-            identityKey: receiver.identityKey,
-            edIdentityKey: receiver.edIdentityKey,
-            signedPreKey: receiver.signedPreKey,
-            signedPreKeySignature: receiver.signedPreKeySignature,
-        };
-
-        if (oneTimePreKeys !== null) {
-            keys.oneTimePreKey = oneTimePreKey;
-            keys.otkKeyId = otkKeyId;
-        }
-
-        return keys;
-
-    } catch(error) {
-        console.error("Error fetching keys:", error.message);
-        return null;
-    }
+export const getInitialMessage = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!isObjectId(id)) return res.status(400).json({ message: 'Invalid user id' });
+    const initialMessage = await Message.findOne(pairQuery(req.user._id, id)).sort({ createdAt: -1 }).lean();
+    res.status(200).json({ initialMessage });
+  } catch (error) {
+    next(error);
+  }
 };
 
-export const getKeysRoute = async (req, res) => {
-    try {
-        const { id: receiverId } = req.params;
-        const keys = await getKeys(receiverId);
-        if (!keys) {
-            return res.status(404).json({ message: "Receiver not found or no keys available" });
-        }
+export const updateSessionInfo = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!isObjectId(id)) return res.status(400).json({ message: 'Invalid user id' });
+    const initial = await Message.findOne(pairQuery(req.user._id, id)).sort({ createdAt: -1 });
+    if (!initial) return res.status(404).json({ message: 'Session not found' });
 
-        // console.log("Keys fetched:", keys);
-        
-        res.status(200).json(keys);
-    } catch (error) {
-        console.error("Error in getKeysRoute:", error.message);
-        res.status(500).json({ message: "Internal server error" });
-    }
+    const isSender = initial.senderId.equals(req.user._id);
+    const updates = isSender
+      ? { 'sessionInfo.senderSessionActive': true }
+      : { 'sessionInfo.receiverHasReceived': true, 'sessionInfo.receiverSessionActive': true };
+    await Message.updateOne({ _id: initial._id }, { $set: updates });
+    res.status(200).json({ message: 'Session updated' });
+  } catch (error) {
+    next(error);
+  }
 };
 
-export const endSession = async (req, res) => {
-    try {
-        const { id: selectedUser } = req.params;
-        const currentUser = req.user._id;
+/**
+ * Mark your side of the session as closed. Once both sides have closed and
+ * the receiver has processed the initial message, the handshake record is
+ * deleted, so the next conversation starts a fresh X3DH.
+ */
+export const endSession = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!isObjectId(id)) return res.status(400).json({ message: 'Invalid user id' });
+    const initial = await Message.findOne(pairQuery(req.user._id, id)).sort({ createdAt: -1 });
+    if (!initial) return res.status(200).json({ message: 'No active session', deleted: false });
 
-        // Find the initial message to determine the session
-        const initialMessage = await Message.findOne({
-            isInitialMessage: true,
-            $or: [
-                { senderId: selectedUser, receiverId: currentUser },
-                { senderId: currentUser, receiverId: selectedUser }
-            ]
-        });
+    const field = initial.senderId.equals(req.user._id) ? 'senderSessionActive' : 'receiverSessionActive';
+    initial.sessionInfo[field] = false;
 
-        if (!initialMessage) {
-            console.log("No initial message found for session end");
-            return res.status(404).json({ message: "Session not found" });
-        }
-
-        // Determine which user is ending the session
-        const isSender = initialMessage.senderId.equals(currentUser);
-        const fieldToUpdate = isSender
-        ? "sessionInfo.senderSessionActive"
-        : "sessionInfo.receiverSessionActive";
-
-        // Update only that flag
-        const updated = await Message.findByIdAndUpdate(
-        initialMessage._id,
-        { $set: { [fieldToUpdate]: false } },
-        { new: true }
-        );
-
-        // Delete the session if the other field is also false and they have received the message
-        if (!updated.sessionInfo.senderSessionActive && !updated.sessionInfo.receiverSessionActive && updated.sessionInfo.receiverHasReceived) {
-            console.log("Both session flags are false, deleting session message");
-            await Message.deleteOne({ _id: updated._id });
-            res.status(200).json({ message: "Session ended and deleted successfully" });
-        } else {
-            console.log("Single user session ended");
-        }
-
-        res.status(200).json({ message: "Session ended successfully for user " + currentUser.username });
-    } catch (error) {
-        console.error("Error ending session:", error.message);
-        res.status(500).json({ message: "Internal server error" });
+    const { senderSessionActive, receiverSessionActive, receiverHasReceived } = initial.sessionInfo;
+    if (!senderSessionActive && !receiverSessionActive && receiverHasReceived) {
+      await Message.deleteOne({ _id: initial._id });
+      return res.status(200).json({ message: 'Session closed by both sides', deleted: true });
     }
-};
-
-export const deletePublicKey = async (req, res) => {
-    try {
-        const { otkKeyId } = req.params;
-        const userId = req.user._id;
-
-        const user = await User.findById(userId);
-
-        if (!user) {
-            return null;
-        }
-
-        const otkExists = user.oneTimePreKeys.some(key => key.id === otkKeyId);
-        if (!otkExists) {
-            console.log(`OTK ${otkKeyId} not found for user ${userId}`);
-            return res.status(404).json({ message: "One-time prekey not found" });
-        }
-        
-        // Delete the public otk
-        await User.updateOne(
-            { _id: userId },
-            { $pull: { oneTimePreKeys: { id: otkKeyId } } }
-        );
-
-        res.status(200).json({ 
-            message: "One-time prekey deleted successfully",
-            deletedKeyId: otkKeyId 
-        });
-
-    } catch (error) {
-        console.error("Error deleting public key:", error.message);
-        res.status(500).json({ message: "Internal server error" });
-    }
-};
-
-export const updateSessionInfo = async (req, res) => {
-    try {
-        const { id: selectedUser } = req.params;
-        const currentUser = req.user._id;
-
-         // Find the initial message to determine the session
-        const initialMessage = await Message.findOne({
-            isInitialMessage: true,
-            $or: [
-                { senderId: selectedUser, receiverId: currentUser },
-                { senderId: currentUser, receiverId: selectedUser }
-            ]
-        });
-
-        if (!initialMessage) {
-            return res.status(404).json({ message: "Session not found" });
-        }
-
-        // Determine which user is received the message
-        const isSender = initialMessage.senderId.equals(currentUser);
-        const updates = isSender
-            ? { "sessionInfo.senderSessionActive": true }
-            : {
-                "sessionInfo.receiverHasReceived": true,
-                "sessionInfo.receiverSessionActive": true
-              };
-  
-        const updatedMessage = await Message.findByIdAndUpdate(
-            initialMessage._id,
-            { $set: updates },
-            { new: true }
-        );
-
-        // console.log("Session info updated:", updatedMessage);
-        res.status(200).json(updatedMessage);
-    } catch (error) {
-        console.error("Error updating receiver session info:", error.message);
-        res.status(500).json({ message: "Internal server error" });
-    }
+    await initial.save();
+    res.status(200).json({ message: 'Session closed on your side', deleted: false });
+  } catch (error) {
+    next(error);
+  }
 };

@@ -1,33 +1,59 @@
-import { Server } from "socket.io";
-import http from "http";
-import express from "express";
+import { Server } from 'socket.io';
+import jwt from 'jsonwebtoken';
 
-const app = express();
-const server = http.createServer(app);
+let io = null;
+const connections = new Map(); // userId -> number of open sockets (tabs)
 
-const io = new Server(server, {
-  cors: {
-    origin: ["http://localhost:5173"],
-  },
-});
-
-const userSocketMap = new Map(); 
-
-export function getReceiverSocketId(userId) {
-  return userSocketMap.get(userId);
+function readCookie(header, name) {
+  if (!header) return null;
+  for (const part of header.split(';')) {
+    const [k, ...v] = part.trim().split('=');
+    if (k === name) return decodeURIComponent(v.join('='));
+  }
+  return null;
 }
 
-io.on("connection", (socket) => {
-    console.log("A user connected", socket.id)
-    const userId = socket.handshake.auth.userId;
-    if (userId) {
-        userSocketMap.set(userId, socket.id);
-        console.log(`User ${userId} connected with socket ID: ${socket.id}`);
-    }
+export const userRoom = (userId) => `user:${userId}`;
 
-    socket.on("disconnect", () => {
-      console.log("A user disconnected", socket.id)
-      delete userSocketMap[userId];
-    })
-})
-export {io, app, server};
+export function getOnlineUserIds() {
+  return [...connections.keys()];
+}
+
+/**
+ * Sockets authenticate with the same httpOnly JWT cookie as the REST API, so
+ * a client can't subscribe to someone else's messages by lying about its id.
+ */
+export function initSocket(server, { origins }) {
+  io = new Server(server, origins.length ? { cors: { origin: origins, credentials: true } } : {});
+
+  io.use((socket, next) => {
+    try {
+      const token = readCookie(socket.handshake.headers.cookie, 'jwt');
+      const { userId } = jwt.verify(token, process.env.JWT_SECRET);
+      socket.data.userId = String(userId);
+      next();
+    } catch {
+      next(new Error('unauthorised'));
+    }
+  });
+
+  io.on('connection', (socket) => {
+    const { userId } = socket.data;
+    socket.join(userRoom(userId));
+    connections.set(userId, (connections.get(userId) ?? 0) + 1);
+    io.emit('onlineUsers', getOnlineUserIds());
+
+    socket.on('disconnect', () => {
+      const n = (connections.get(userId) ?? 1) - 1;
+      if (n <= 0) connections.delete(userId);
+      else connections.set(userId, n);
+      io.emit('onlineUsers', getOnlineUserIds());
+    });
+  });
+
+  return io;
+}
+
+export function emitToUser(userId, event, payload) {
+  io?.to(userRoom(String(userId))).emit(event, payload);
+}

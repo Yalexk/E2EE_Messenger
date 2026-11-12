@@ -1,59 +1,22 @@
-import express from "express"
-import dotenv from "dotenv";
-import swaggerJsDoc from "swagger-jsdoc";
-import swaggerUi from "swagger-ui-express";
-import cookieParser from "cookie-parser";
-import cors from "cors";
+import { createApp } from './app.js';
+import { connectDB } from './lib/db.js';
+import { ensureBot } from './bot/bot.js';
 
-import { connectDB } from "./lib/db.js";
+for (const name of ['MONGODB_URI', 'JWT_SECRET']) {
+  if (!process.env[name]) {
+    console.error(`Missing required environment variable ${name}. See backend/.env.example.`);
+    process.exit(1);
+  }
+}
+if (process.env.NODE_ENV === 'production' && process.env.JWT_SECRET.length < 32) {
+  console.error('JWT_SECRET must be at least 32 characters in production.');
+  process.exit(1);
+}
 
-import authRoutes from "./routes/auth.route.js";
-import messageRoutes from "./routes/message.route.js";
-import sessionRoutes from "./routes/session.route.js";
-import { app, server } from "./lib/socket.js";
+const PORT = Number(process.env.PORT ?? 5001);
 
-const options = {
-    definition: {
-        openapi: "3.0.0",
-        info: {
-            title: "COMP6841 Messager API",
-            version: "1.0.0",
-            description: "API for Messager, a e2ee chatting app for Alex's COMP6841 project",
-        },
-        servers: [
-            {
-                url: "http://localhost:5001/api",
-            },
-        ],
-    },
-    apis: [
-        "./src/routes/auth.route.js", 
-        "./src/routes/message.route.js",
-        "./src/routes/session.route.js",
-    ],
-};
+await connectDB();
+await ensureBot();
 
-const swaggerSpec = swaggerJsDoc(options);
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-
-dotenv.config();
-
-const PORT = process.env.PORT;
-
-app.use(express.json());
-app.use(cookieParser());
-app.use(cors({
-    origin: "http://localhost:5173",
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-}));
-
-app.use("/api/auth", authRoutes);
-app.use("/api/messages", messageRoutes);
-app.use("/api/session", sessionRoutes);
-
-server.listen(PORT, () => {
-  console.log('Server is running on PORT: ' + PORT);
-  connectDB();
-});
+const { server } = createApp();
+server.listen(PORT, () => console.log(`Server listening on http://localhost:${PORT}`));

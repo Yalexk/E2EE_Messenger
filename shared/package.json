@@ -1,0 +1,18 @@
+{
+  "name": "@e2ee/x3dh",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pure X3DH key agreement + AES-GCM AEAD, shared by the web app, the playground and the demo bot",
+  "type": "module",
+  "main": "x3dh.js",
+  "exports": {
+    ".": "./x3dh.js"
+  },
+  "scripts": {
+    "test": "node --test \"test/**/*.test.js\""
+  },
+  "dependencies": {
+    "ed2curve": "^0.3.0",
+    "tweetnacl": "^1.0.3"
+  }
+}

@@ -148,6 +148,7 @@ export const useChatStore = create((set, get) => ({
     const peer = String(m.senderId) === String(me) ? String(m.receiverId) : String(m.senderId);
     if (!selectedUser || String(selectedUser._id) !== peer) {
       set((s) => ({ unread: { ...s.unread, [peer]: (s.unread[peer] ?? 0) + 1 } }));
+      if (!get().users.some((u) => String(u._id) === peer)) get().loadUsers();
       return;
     }
     const decrypted = await decryptMessage(m);

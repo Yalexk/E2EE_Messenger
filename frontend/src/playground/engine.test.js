@@ -24,6 +24,7 @@ describe('playground engine', () => {
     const s = await runTo('chat');
     const dump = JSON.stringify(s.packets);
     expect(dump).not.toContain('first!');
+    for (const p of s.packets) for (const [, v] of p.fields) expect(typeof v).toBe('string');
   });
 
   it('a swapped signed prekey fails verification and blocks progress', async () => {

@@ -26,7 +26,9 @@ export const STEPS = [
 export const stepIndex = (id) => STEPS.findIndex((s) => s.id === id);
 
 let packetSeq = 0;
-const packet = (p) => ({ id: ++packetSeq, at: Date.now(), ...p });
+// Everything on the wire is shown as base64, like it would be in JSON.
+const wire = (v) => (v instanceof Uint8Array ? x3dh.toB64(v) : v);
+const packet = (p) => ({ id: ++packetSeq, at: Date.now(), ...p, fields: p.fields.map(([k, v]) => [k, wire(v)]) });
 
 export function initialState(options) {
   return {

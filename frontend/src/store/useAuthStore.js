@@ -150,7 +150,13 @@ export const useAuthStore = create((set, get) => ({
     if (get().socket) return;
     const socket = io({ withCredentials: true, transports: ['websocket', 'polling'] });
     const chat = () => useChatStore.getState();
-    socket.on('onlineUsers', (ids) => set({ onlineUserIds: ids }));
+    socket.on('onlineUsers', (ids) => {
+      set({ onlineUserIds: ids });
+      // Someone we haven't seen yet (e.g. a brand-new signup): refresh the list.
+      const me = String(get().authUser?._id);
+      const known = new Set(chat().users.map((u) => String(u._id)));
+      if (ids.some((id) => String(id) !== me && !known.has(String(id)))) chat().loadUsers();
+    });
     socket.on('newMessage', (m) => chat().receiveMessage(m));
     socket.on('sessionStarted', (p) => chat().onSessionStarted(p));
     socket.on('prekeysLow', () => get().replenishOneTimePreKeys().catch(console.error));

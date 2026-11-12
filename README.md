@@ -102,3 +102,7 @@ docker run -p 8080:8080 -e MONGODB_URI=... -e JWT_SECRET=$(openssl rand -hex 32)
 
 Set `TRUST_PROXY=1` when running behind a reverse proxy so rate limiting sees real client IPs. Demo messages expire
 after 7 days (`MESSAGE_TTL_SECONDS`).
+
+## License
+
+MIT. See [LICENSE](LICENSE).

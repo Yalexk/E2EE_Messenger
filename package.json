@@ -17,5 +17,6 @@
     "start": "npm start -w backend",
     "test": "npm test -w shared && npm test -w backend && npm test -w frontend",
     "lint": "npm run lint -w frontend"
-  }
+  },
+  "license": "MIT"
 }

@@ -11,7 +11,7 @@
   "keywords": [],
   "author": "",
   "type": "module",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "@e2ee/x3dh": "*",
     "bcryptjs": "^3.0.2",

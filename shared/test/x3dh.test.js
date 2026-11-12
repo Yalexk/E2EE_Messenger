@@ -87,6 +87,20 @@ test('a tampered signed prekey is rejected before any DH happens', async () => {
   await assert.rejects(x3dhInitiate({ identity: alice, bundle: forged }), { code: 'BAD_SIGNATURE' });
 });
 
+test("a bundle pairing someone else's signing key with Bob's DH key is rejected", async () => {
+  const alice = generateIdentityKeyPair();
+  const bob = makeBob();
+  const mallory = generateIdentityKeyPair();
+  const malSpk = generateSignedPreKey(mallory);
+  const forged = {
+    ...bob.bundle,
+    edIdentityKey: toB64(mallory.edPublicKey),
+    signedPreKey: toB64(malSpk.publicKey),
+    signedPreKeySignature: toB64(malSpk.signature),
+  };
+  await assert.rejects(x3dhInitiate({ identity: alice, bundle: forged }), { code: 'BAD_SIGNATURE' });
+});
+
 test('a signature from a different identity is rejected', () => {
   const bob = makeBob();
   const eve = generateIdentityKeyPair();

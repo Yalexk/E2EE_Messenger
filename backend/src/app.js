@@ -33,7 +33,7 @@ export function createApp() {
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", 'data:'],
         fontSrc: ["'self'", 'data:'],
-        connectSrc: ["'self'", 'ws:', 'wss:'],
+        connectSrc: ["'self'"], // CSP3: 'self' also covers same-origin ws/wss
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
       },

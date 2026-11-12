@@ -25,6 +25,7 @@ let app;
 
 before(async () => {
   await mongoose.connect(`${base}/${dbName}`, { serverSelectionTimeoutMS: 3000 });
+  await mongoose.connection.syncIndexes();
   await ensureBot();
   ({ app } = createApp());
 });
@@ -106,6 +107,53 @@ test('signup rejects a bundle whose signed prekey signature does not verify', as
   });
   assert.equal(res.status, 400);
   assert.match(res.body.message, /signature/i);
+});
+
+test("signup rejects an Ed25519 key that isn't the same key as the DH identity key", async () => {
+  const id = x3dh.generateIdentityKeyPair();
+  const other = x3dh.generateIdentityKeyPair();
+  const spk = x3dh.generateSignedPreKey(other);
+  const res = await request(app).post('/api/auth/signup').send({
+    username: 'mismatch',
+    password: 'correct horse battery',
+    identityKey: b64(id.publicKey),
+    edIdentityKey: b64(other.edPublicKey),
+    signedPreKeyId: spk.id,
+    signedPreKey: b64(spk.publicKey),
+    signedPreKeySignature: b64(spk.signature),
+    oneTimePreKeys: [{ id: 'a', publicKey: b64(new Uint8Array(32).fill(9)) }],
+  });
+  assert.equal(res.status, 400);
+  assert.match(res.body.message, /identity keys/i);
+});
+
+test('usernames are unique case-insensitively', async () => {
+  const u = await makeUser('Casey');
+  const id = x3dh.generateIdentityKeyPair();
+  const spk = x3dh.generateSignedPreKey(id);
+  const res = await request(app).post('/api/auth/signup').send({
+    username: u.username.toUpperCase(),
+    password: 'correct horse battery',
+    identityKey: b64(id.publicKey),
+    edIdentityKey: b64(id.edPublicKey),
+    signedPreKeyId: spk.id,
+    signedPreKey: b64(spk.publicKey),
+    signedPreKeySignature: b64(spk.signature),
+    oneTimePreKeys: [{ id: 'a', publicKey: b64(new Uint8Array(32).fill(9)) }],
+  });
+  assert.equal(res.status, 400);
+});
+
+test("one requester can't drain another user's one-time prekeys", async () => {
+  const mallory = await makeUser('mallory');
+  const victim = await makeUser('victim3', { opks: 20 });
+  const fetched = [];
+  for (let i = 0; i < 8; i++) fetched.push((await mallory.agent.get(`/api/session/keys/${victim.id}`)).body);
+  assert.equal(fetched.filter((b) => b.oneTimePreKey).length, 5);
+  assert.equal(fetched.at(-1).remainingOneTimePreKeys, 15);
+  // Someone else still gets one.
+  const carol = await makeUser('carol2');
+  assert.ok((await carol.agent.get(`/api/session/keys/${victim.id}`)).body.oneTimePreKey);
 });
 
 test('signup validates input and reserves the bot name', async () => {

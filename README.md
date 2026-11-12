@@ -44,7 +44,9 @@ Bob: same four DHs from his side → same SK → decrypts, deletes OPK_B
 
 No Double Ratchet (one key per session, not per message) · one device per account, no key backup · identity keys
 are trust-on-first-use · the bot's keys live on the server (fine for a bot, never for a person) · the server still
-sees metadata · not audited.
+sees metadata · the key-vault password is the login password, so the server sees it at login (a real app would
+derive separate auth and vault secrets) · sessions are stateless JWTs that can't be revoked server-side before they
+expire · not audited.
 
 ## Project layout
 

@@ -8,8 +8,8 @@ for (const name of ['MONGODB_URI', 'JWT_SECRET']) {
     process.exit(1);
   }
 }
-if (process.env.NODE_ENV === 'production' && process.env.JWT_SECRET.length < 32) {
-  console.error('JWT_SECRET must be at least 32 characters in production.');
+if (process.env.NODE_ENV === 'production' && (process.env.JWT_SECRET.length < 32 || /change-me/i.test(process.env.JWT_SECRET))) {
+  console.error('JWT_SECRET must be a random value of at least 32 characters in production (e.g. `openssl rand -hex 32`).');
   process.exit(1);
 }
 

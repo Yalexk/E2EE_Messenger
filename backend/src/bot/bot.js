@@ -156,6 +156,7 @@ export async function handleInitialMessage(initial) {
   }
 
   const previous = await BotSession.countDocuments({ userId: initial.senderId });
+  if (await BotSession.exists({ sessionId: initial.sessionId })) return null; // session ids are single-use
   const session = await BotSession.create({
     sessionId: initial.sessionId,
     userId: initial.senderId,
@@ -175,7 +176,7 @@ export async function handleInitialMessage(initial) {
 }
 
 export async function handleMessage(message) {
-  const session = await BotSession.findOne({ sessionId: message.sessionId });
+  const session = await BotSession.findOne({ sessionId: message.sessionId, userId: message.senderId });
   if (!session) return;
   let text;
   try {

@@ -120,6 +120,20 @@ export function publicKeyFromSecret(secretKey) {
   return nacl.scalarMult.base(fromB64(secretKey));
 }
 
+/**
+ * The bundle carries the identity key twice: Ed25519 (to verify signatures)
+ * and X25519 (for DH). Check they're the same key, otherwise a valid
+ * signature by *some* Ed25519 key would prove nothing about the DH key.
+ */
+export function identityKeysMatch(edIdentityKey, identityKey) {
+  try {
+    const converted = ed2curve.convertPublicKey(fromB64(edIdentityKey));
+    return !!converted && equalBytes(converted, fromB64(identityKey));
+  } catch {
+    return false;
+  }
+}
+
 export function verifySignedPreKey(edIdentityKey, signedPreKey, signature) {
   try {
     return nacl.sign.detached.verify(fromB64(signedPreKey), fromB64(signature), fromB64(edIdentityKey));
@@ -181,6 +195,11 @@ const PURPOSE = {
  * @returns { sharedKey, associatedData, ephemeralPublicKey, oneTimePreKeyId, trace }
  */
 export async function x3dhInitiate({ identity, bundle, ephemeral }) {
+  if (!identityKeysMatch(bundle.edIdentityKey, bundle.identityKey)) {
+    const err = new Error("The bundle's signing key and DH identity key don't belong together");
+    err.code = 'BAD_SIGNATURE';
+    throw err;
+  }
   if (!verifySignedPreKey(bundle.edIdentityKey, bundle.signedPreKey, bundle.signedPreKeySignature)) {
     const err = new Error("Signed prekey signature is invalid: the bundle was tampered with or isn't Bob's");
     err.code = 'BAD_SIGNATURE';

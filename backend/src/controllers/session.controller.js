@@ -13,6 +13,28 @@ const pairQuery = (a, b) => ({
 });
 
 /**
+ * One-time prekeys are a finite, shared resource: without a cap, one user
+ * could fetch someone's bundle in a loop and burn all of their OPKs, forcing
+ * everyone else's handshakes down to 3 DHs. Each requester may consume at most
+ * OPK_FETCHES_PER_HOUR of a given user's OPKs; beyond that they still get a
+ * valid bundle, just without an OPK.
+ */
+const OPK_FETCHES_PER_HOUR = 5;
+const opkFetches = new Map(); // `${requester}:${target}` -> timestamps
+function mayTakeOneTimePreKey(requester, target) {
+  const key = `${requester}:${target}`;
+  const cutoff = Date.now() - 3600_000;
+  const recent = (opkFetches.get(key) ?? []).filter((t) => t > cutoff);
+  const allowed = recent.length < OPK_FETCHES_PER_HOUR;
+  if (allowed) recent.push(Date.now());
+  opkFetches.set(key, recent);
+  if (opkFetches.size > 50_000) {
+    for (const [k, v] of opkFetches) if (!v.some((t) => t > cutoff)) opkFetches.delete(k);
+  }
+  return allowed;
+}
+
+/**
  * Hand out a prekey bundle. Per the X3DH spec, the one-time prekey is
  * removed from the server the moment it is handed out, so it can never be
  * given to two different initiators.
@@ -23,15 +45,14 @@ export const getKeysRoute = async (req, res, next) => {
     if (!isObjectId(id)) return res.status(400).json({ message: 'Invalid user id' });
     if (id === String(req.user._id)) return res.status(400).json({ message: "You can't start a session with yourself" });
 
-    const before = await User.findOneAndUpdate(
-      { _id: id },
-      { $pop: { oneTimePreKeys: -1 } },
-      { new: false, projection: { password: 0 } },
-    ).lean();
+    const takeOpk = mayTakeOneTimePreKey(String(req.user._id), id);
+    const before = takeOpk
+      ? await User.findOneAndUpdate({ _id: id }, { $pop: { oneTimePreKeys: -1 } }, { new: false, projection: { password: 0 } }).lean()
+      : await User.findById(id).select('-password').lean();
     if (!before) return res.status(404).json({ message: 'User not found' });
 
-    const oneTimePreKey = before.oneTimePreKeys[0] ?? null;
-    const remaining = Math.max(0, before.oneTimePreKeys.length - 1);
+    const oneTimePreKey = takeOpk ? before.oneTimePreKeys[0] ?? null : null;
+    const remaining = Math.max(0, before.oneTimePreKeys.length - (oneTimePreKey ? 1 : 0));
 
     if (before.isBot) bot.replenishOneTimePreKeys().catch((e) => console.error('[bot] replenish failed', e));
     else if (remaining < 20) emitToUser(id, 'prekeysLow', { remaining });

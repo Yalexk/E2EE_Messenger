@@ -5,7 +5,7 @@ import mongoose from 'mongoose';
  */
 const userSchema = new mongoose.Schema(
   {
-    username: { type: String, required: true, unique: true, trim: true },
+    username: { type: String, required: true, trim: true },
     password: { type: String, required: true },
 
     // Long-term identity key: X25519 form (for DH) and Ed25519 form (for signatures)
@@ -28,6 +28,9 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+// Usernames are unique case-insensitively ("Alice" and "alice" can't both exist).
+userSchema.index({ username: 1 }, { unique: true, collation: { locale: 'en', strength: 2 }, name: 'username_ci' });
 
 /** Fields that are safe to show any other user. */
 export function publicUser(user) {

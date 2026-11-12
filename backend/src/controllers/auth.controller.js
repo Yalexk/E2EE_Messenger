@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { verifySignedPreKey } from '@e2ee/x3dh';
+import { verifySignedPreKey, identityKeysMatch } from '@e2ee/x3dh';
 import { generateToken, cookieOptions } from '../lib/utils.js';
 import User, { publicUser } from '../models/user.model.js';
 import { BOT_USERNAME } from '../bot/bot.js';
@@ -12,6 +12,7 @@ const SPK_MAX_AGE_DAYS = 7;
 function bundleError(body) {
   const { identityKey, edIdentityKey, signedPreKeyId, signedPreKey, signedPreKeySignature } = body;
   if (!isKey(identityKey) || !isKey(edIdentityKey)) return 'Invalid identity key';
+  if (!identityKeysMatch(edIdentityKey, identityKey)) return 'Identity keys do not match';
   if (!isShortId(signedPreKeyId) || !isKey(signedPreKey) || !isSignature(signedPreKeySignature)) return 'Invalid signed prekey';
   // The server checks the signature too: it refuses to publish a bundle that
   // clients would reject anyway.

@@ -1,246 +1,165 @@
 import { create } from 'zustand';
-import { axiosInstance } from '../lib/axios.js';
 import { io } from 'socket.io-client';
-import nacl from 'tweetnacl';
-import naclUtil from 'tweetnacl-util';
-import ed2curve from 'ed2curve';
-import { nanoid } from 'nanoid';
-import { encryptWithPassword, decryptWithPassword } from '../lib/crypto.js';
+import { api, errorMessage } from '../lib/api.js';
+import * as vault from '../lib/keyVault.js';
+import { generateAccountKeys, newOneTimePreKeys, newSignedPreKey, withSignedPreKey } from '../lib/keys.js';
+import { useChatStore } from './useChatStore.js';
 
-const BASE_URL = 'http://localhost:5001';
-
+/**
+ * status:
+ *   checking   - asking the server whether we have a session cookie
+ *   anonymous  - not logged in
+ *   locked     - logged in on the server, but the local key vault is locked
+ *   no-keys    - logged in, but this browser has no keys for the account
+ *   ready      - logged in with keys unlocked
+ */
 export const useAuthStore = create((set, get) => ({
-    authUser: null,
-    loginPassword: null,
-    isSigningUp: false,
-    isLoggingIn: false,
-    isCheckingAuth: true,
-    socket: null,
+  status: 'checking',
+  authUser: null,
+  keys: null,
+  socket: null,
+  onlineUserIds: [],
+  busy: false,
+  error: null,
 
-    checkAuth: async () => {
-        try {
-            const res = await axiosInstance.get('/auth/check');
-            set({ authUser:res.data })
+  clearError: () => set({ error: null }),
 
-            get().connectSocket();
-        } catch (error) {
-            console.error("Error checking authentication:", error);
-            set({ authUser:null });
-        } finally {
-            set({ isCheckingAuth: false });
-        }
-    },
+  checkAuth: async () => {
+    try {
+      const { data } = await api.get('/auth/check');
+      const username = data.user.username;
+      if (!vault.hasVault(username)) return set({ status: 'no-keys', authUser: data.user });
+      const keys = await vault.resumeVault(username);
+      if (!keys) return set({ status: 'locked', authUser: data.user });
+      set({ status: 'ready', authUser: data.user, keys });
+      get().afterUnlock(data);
+    } catch {
+      set({ status: 'anonymous', authUser: null, keys: null });
+    }
+  },
 
-    signup: async (data) => {
-        set({ isSigningUp: true })
-        try {
-            // Generate identity key pairs
-            // Ed25519 keypair for signing, need to convert it to X25519 for encryption using ed2curve
-            const edIdentityKeyPair = nacl.sign.keyPair(); 
-            const identityKeyPair = ed2curve.convertKeyPair(edIdentityKeyPair);
-            const signedPreKeyPair = nacl.box.keyPair(); // X25519 keypair
+  signup: async ({ username, password }) => {
+    set({ busy: true, error: null });
+    try {
+      // Keys are generated here, in the browser. Only the public half is sent.
+      const { keys, bundle } = generateAccountKeys();
+      const { data } = await api.post('/auth/signup', { username, password, ...bundle });
+      await vault.createVault(data.user.username, password, keys);
+      set({ status: 'ready', authUser: data.user, keys });
+      get().connectSocket();
+      return true;
+    } catch (error) {
+      set({ error: errorMessage(error) });
+      return false;
+    } finally {
+      set({ busy: false });
+    }
+  },
 
-            // Create the signed prekey signature
-            const signedPreKeySignature = nacl.sign.detached(
-                signedPreKeyPair.publicKey,
-                edIdentityKeyPair.secretKey
-            );
+  login: async ({ username, password }) => {
+    set({ busy: true, error: null });
+    try {
+      const { data } = await api.post('/auth/login', { username, password });
+      const name = data.user.username;
+      if (!vault.hasVault(name)) {
+        set({ status: 'no-keys', authUser: data.user });
+        return true;
+      }
+      const keys = await vault.unlockVault(name, password);
+      set({ status: 'ready', authUser: data.user, keys });
+      get().afterUnlock(data);
+      return true;
+    } catch (error) {
+      set({ error: errorMessage(error) });
+      return false;
+    } finally {
+      set({ busy: false });
+    }
+  },
 
-            const oneTimePreKeys = [];
-            for (let i = 0; i < 100; i++) {
-                const { publicKey, secretKey } = nacl.box.keyPair();
-                oneTimePreKeys.push({
-                    id: nanoid(),
-                    publicKey: naclUtil.encodeBase64(publicKey),
-                    privateKey: naclUtil.encodeBase64(secretKey),
-                });
-            }
+  unlock: async (password) => {
+    const { authUser } = get();
+    set({ busy: true, error: null });
+    try {
+      const keys = await vault.unlockVault(authUser.username, password);
+      set({ status: 'ready', keys });
+      const { data } = await api.get('/auth/check');
+      get().afterUnlock(data);
+      return true;
+    } catch (error) {
+      set({ error: errorMessage(error) });
+      return false;
+    } finally {
+      set({ busy: false });
+    }
+  },
 
-            const publicPrekeys = oneTimePreKeys.map(k => ({
-                id: k.id,
-                publicKey: k.publicKey
-            }));
+  /** Top up one-time prekeys / rotate the signed prekey if the server says so. */
+  afterUnlock: (status) => {
+    get().connectSocket();
+    if (status?.needsOneTimePreKeys) get().replenishOneTimePreKeys().catch(console.error);
+    if (status?.needsSignedPreKeyRotation) get().rotateSignedPreKey().catch(console.error);
+  },
 
-            const privatePreKeys = oneTimePreKeys.map(k => ({
-                id: k.id,
-                privateKey: k.privateKey
-            }));
+  updateKeys: async (mutate) => {
+    const { authUser } = get();
+    const next = mutate(get().keys);
+    set({ keys: next });
+    await vault.saveVault(authUser.username, next);
+    return next;
+  },
 
-            const identityKey = naclUtil.encodeBase64(identityKeyPair.publicKey);
-            const edIdentityKey = naclUtil.encodeBase64(edIdentityKeyPair.publicKey);
-            const signedPreKey = naclUtil.encodeBase64(signedPreKeyPair.publicKey);
-            const signedPreKeySignatureBase64 = naclUtil.encodeBase64(signedPreKeySignature);
-            
-            const privateKeys = {
-                identityKeySecret: naclUtil.encodeBase64(identityKeyPair.secretKey),
-                edIdentityKeySecret: naclUtil.encodeBase64(edIdentityKeyPair.secretKey),
-                signedPreKeySecret: naclUtil.encodeBase64(signedPreKeyPair.secretKey),
-                oneTimePreKeysSecret: privatePreKeys,
-                sessions: [],
-            };
-            
-            const privateKeysString = JSON.stringify(privateKeys);
-            localStorage.setItem(`privateKeys${data.username}`, privateKeysString); 
+  replenishOneTimePreKeys: async () => {
+    const { secrets, publics } = newOneTimePreKeys();
+    // Store the secret halves *before* publishing the public halves.
+    await get().updateKeys((k) => ({ ...k, oneTimePreKeys: { ...k.oneTimePreKeys, ...secrets } }));
+    const { data } = await api.post('/auth/otks', { oneTimePreKeys: publics });
+    const rejected = publics.filter((p) => !data.accepted.includes(p.id)).map((p) => p.id);
+    if (rejected.length) {
+      await get().updateKeys((k) => {
+        const oneTimePreKeys = { ...k.oneTimePreKeys };
+        for (const id of rejected) delete oneTimePreKeys[id];
+        return { ...k, oneTimePreKeys };
+      });
+    }
+  },
 
-            const res = await axiosInstance.post("/auth/signup", {
-                ...data,
-                identityKey,
-                edIdentityKey,
-                signedPreKey,
-                signedPreKeySignature: signedPreKeySignatureBase64,
-                oneTimePreKeys: publicPrekeys,
-            });
+  rotateSignedPreKey: async () => {
+    const { record, published } = newSignedPreKey(get().keys.identity);
+    await get().updateKeys((k) => withSignedPreKey(k, record));
+    await api.put('/auth/signedPreKey', published);
+  },
 
-            set({ authUser: res.data.user, loginPassword: data.password });
-            console.log("Signed up user:", res.data);
-            get().connectSocket();
-        } catch (error) {
-            console.error("Error signing up:", error);
-        } finally {
-            set({ isSigningUp: false });
-        }
-    },
+  logout: async () => {
+    const { authUser } = get();
+    get().disconnectSocket();
+    useChatStore.getState().reset();
+    if (authUser) await vault.lockVault(authUser.username);
+    await api.post('/auth/logout').catch(() => {});
+    set({ status: 'anonymous', authUser: null, keys: null, onlineUserIds: [], error: null });
+  },
 
-    login: async (data) => {
-        set({ isLoggingIn: true });
-        try {
-            const res = await axiosInstance.post("/auth/login", data);
-            set({ authUser: res.data.user, loginPassword: data.password });
-            console.log("Logged in user:", res.data.user);
+  /** Forget this account's keys on this device (the only way out of "no-keys"). */
+  forgetDevice: async () => {
+    const { authUser } = get();
+    if (authUser) await vault.deleteVault(authUser.username);
+    await get().logout();
+  },
 
-            // decrypt the private keys from local storage
-            const privateKeysEncrypted = localStorage.getItem(`privateKeys${data.username}`);
-            const blob = JSON.parse(privateKeysEncrypted);
-            const privateKeys = await decryptWithPassword(blob, data.password);
-            const privateKeysString = JSON.stringify(privateKeys);
-            console.log("Decrypted private keys:", privateKeysString);
-            localStorage.setItem(`privateKeys${data.username}`, privateKeysString); 
+  connectSocket: () => {
+    if (get().socket) return;
+    const socket = io({ withCredentials: true, transports: ['websocket', 'polling'] });
+    const chat = () => useChatStore.getState();
+    socket.on('onlineUsers', (ids) => set({ onlineUserIds: ids }));
+    socket.on('newMessage', (m) => chat().receiveMessage(m));
+    socket.on('sessionStarted', (p) => chat().onSessionStarted(p));
+    socket.on('prekeysLow', () => get().replenishOneTimePreKeys().catch(console.error));
+    socket.on('connect', () => chat().onReconnect?.());
+    set({ socket });
+  },
 
-            // generete new otks if < 10 in db
-            if(res.data.generateOtks) {
-                console.log("Generating new one-time prekeys...");
-                const privateKeys = await get().loadPrivateKeys(data.username);
-
-                const oneTimePreKeys = [];
-                for (let i = 0; i < 100; i++) {
-                    const { publicKey, secretKey } = nacl.box.keyPair();
-                    oneTimePreKeys.push({
-                        id: nanoid(),
-                        publicKey: naclUtil.encodeBase64(publicKey),
-                        privateKey: naclUtil.encodeBase64(secretKey),
-                    });
-                }
-
-                const publicPrekeys = oneTimePreKeys.map(k => ({
-                    id: k.id,
-                    publicKey: k.publicKey
-                }));
-
-                const privatePreKeys = oneTimePreKeys.map(k => ({
-                    id: k.id,
-                    privateKey: k.privateKey
-                }));
-
-                const newPrivateKeys = {
-                    identityKeySecret: privateKeys.identityKeySecret,
-                    edIdentityKeySecret: privateKeys.edIdentityKeySecret,
-                    signedPreKeySecret: privateKeys.signedPreKeySecret,
-                    oneTimePreKeysSecret: [...privateKeys.oneTimePreKeysSecret, ...privatePreKeys],
-                    sessions: privateKeys.sessions,
-                };
-            
-                const newPrivateKeysString = JSON.stringify(newPrivateKeys);
-                localStorage.setItem(`privateKeys${data.username}`, newPrivateKeysString); 
-
-                // send the public otks to the server
-                await axiosInstance.post("/auth/otks", {
-                    username: res.data.user.username,
-                    oneTimePreKeys: publicPrekeys,
-                });
-            }
-
-            if (res.data.generateNewPrekeys) {
-                console.log("Generating new signed prekey...");
-                const privateKeys = await get().loadPrivateKeys(data.username);
-
-                const signedPreKeyPair = nacl.box.keyPair();
-                const signedPreKeySignature = nacl.sign.detached(
-                    signedPreKeyPair.publicKey,
-                    naclUtil.decodeBase64(privateKeys.edIdentityKeySecret)
-                );
-
-                // update the local storage with the new signed prekey
-                const newPrivateKeys = {
-                    identityKeySecret: privateKeys.identityKeySecret,
-                    edIdentityKeySecret: privateKeys.edIdentityKeySecret,
-                    signedPreKeySecret: naclUtil.encodeBase64(signedPreKeyPair.secretKey),
-                    oneTimePreKeysSecret: privateKeys.oneTimePreKeysSecret,
-                    sessions: privateKeys.sessions,
-                };
-
-                const newPrivateKeysString = JSON.stringify(newPrivateKeys);
-                localStorage.setItem(`privateKeys${data.username}`, newPrivateKeysString);
-
-                // update the signed prekey and signature in the database
-                await axiosInstance.put("/auth/signedPreKey", {
-                    username: res.data.user.username,
-                    signedPreKey: naclUtil.encodeBase64(signedPreKeyPair.publicKey),
-                    signedPreKeySignature: naclUtil.encodeBase64(signedPreKeySignature),
-                });
-            }
-
-            get().connectSocket();
-        } catch (error) {
-            console.error("Error logging in:", error);
-        } finally {
-            set({ isLoggingIn: false });
-        }
-    },
-
-    loadPrivateKeys: async (username) => {
-        const privateKeysString = localStorage.getItem(`privateKeys${username}`);
-        if (!privateKeysString) {
-            console.error("Private keys not found in local storage");
-            return null;
-        }
-        return JSON.parse(privateKeysString);
-    },
-
-    logout: async () => {
-        try {
-            const username = get().authUser.username;
-            // encrypt the private keys in local storage
-            const privateKeysString = localStorage.getItem(`privateKeys${username}`);
-            const privateKeys = JSON.parse(privateKeysString);
-            const blob = await encryptWithPassword(privateKeys, get().loginPassword);
-            localStorage.setItem(
-               `privateKeys${username}`,
-               JSON.stringify(blob)
-            )
-
-            await axiosInstance.post("/auth/logout");
-            set({ authUser: null, loginPassword: null });
-            get().disconnectSocket();
-        } catch (error) {
-            console.error("Error logging out:", error);
-        }
-    },
-    
-
-    connectSocket: () => {
-        const {authUser} = get();
-        if (!authUser || get().socket?.connected) return;
-        
-        const socket = io(BASE_URL, {
-            auth: {
-                userId: authUser._id,
-            },
-        });
-        set({ socket: socket });
-    },
-
-    disconnectSocket: () => {
-        const socket = get().socket;
-        if (socket && socket.connected) socket.disconnect();
-    },
+  disconnectSocket: () => {
+    get().socket?.disconnect();
+    set({ socket: null });
+  },
 }));
